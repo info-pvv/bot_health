@@ -1,0 +1,34 @@
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+class UserBase(BaseModel):
+    user_id: int
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    username: Optional[str] = None
+
+class UserCreate(UserBase):
+    pass
+
+class UserUpdate(BaseModel):
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    username: Optional[str] = None
+
+class UserStatusBase(BaseModel):
+    enable_report: bool = True
+    enable_admin: bool = False
+    sector: Optional[int] = None
+
+class UserStatusUpdate(BaseModel):
+    enable_report: Optional[bool] = None
+    enable_admin: Optional[bool] = None
+    sector: Optional[int] = None
+
+class UserResponse(UserBase):
+    id: int
+    status: Optional[UserStatusBase] = None
+    
+    class Config:
+        from_attributes = True
