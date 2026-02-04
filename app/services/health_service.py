@@ -1,10 +1,9 @@
-# app/services/health_service.py
+# app/services/health_service.py - обновленная версия
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.models.user import User, UserStatus, FIO, Health, Disease
-from app.schemas.health import HealthUpdate, DiseaseUpdate
-from typing import List, Tuple, Dict, Optional  # Добавьте Optional здесь
+from typing import List, Tuple, Dict, Optional
 from collections import defaultdict
 
 class HealthService:
@@ -46,7 +45,7 @@ class HealthService:
     
     @staticmethod
     async def get_report(db: AsyncSession, sector_id: Optional[int] = None) -> Tuple[Dict, List]:
-        # Базовый запрос
+        # Базовый запрос с JOIN
         query = (
             select(
                 FIO.first_name,
@@ -70,11 +69,10 @@ class HealthService:
         
         # Статистика по статусам
         status_stats = defaultdict(int)
-        total = 0
         
         for user in users_data:
-            status_stats[user[2]] += 1
-            total += 1
+            status = user[2] or "не указан"
+            status_stats[status] += 1
         
         return dict(status_stats), users_data
     
@@ -84,5 +82,6 @@ class HealthService:
             select(UserStatus.sector)
             .distinct()
             .where(UserStatus.enable_report == True)
+            .where(UserStatus.sector.isnot(None))
         )
-        return [row[0] for row in result.all() if row[0]]
+        return [row[0] for row in result.all()]

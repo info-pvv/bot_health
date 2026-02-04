@@ -127,7 +127,30 @@ async def cmd_report(message: types.Message):
         "Всего: 15",
         reply_markup=types.ReplyKeyboardRemove()
     )
-
+async def report_health(dp:Dispatcher):
+    id_sectors=get_id_sectors()
+    for tuple in id_sectors:
+        get_list_all=get_list_chat_id(tuple[0])
+        string_status = ''
+        string_to_send = ''
+        hop_count = 0
+        ill_healt = 0
+        st_healt={}
+        for str_to_append in get_list_all:
+            for string_to_append in str_to_append:
+                string_to_send += str(string_to_append)+' '
+            string_to_send += '\n'
+            ill_healt=st_healt.setdefault(str_to_append[2],0)+1
+            st_healt[str_to_append[2]]=ill_healt
+        for key in st_healt.keys():
+            hop_count+=st_healt[key]
+            string_status+=f'{key} - {st_healt[key]}\n'
+        string_status+=f'Всего: {hop_count}\n'    
+        print(tuple[0])
+        print(string_status)
+        print(string_to_send)
+        await dp.bot.send_message(tuple[0],text=string_status)
+        await dp.bot.send_message(tuple[0],text=string_to_send)
 
 # Команда /cancel
 @dp.message(ActionStates.waiting_for_action, F.text == "Отменить текущее действие")
