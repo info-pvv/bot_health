@@ -7,7 +7,7 @@ from app.models.database import Base
 class User(Base):
     __tablename__ = "users"
     
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)  
     user_id = Column(BigInteger, unique=True, index=True, nullable=False)
     first_name = Column(String(100))
     last_name = Column(String(100))
@@ -27,7 +27,7 @@ class UserStatus(Base):
     user_id = Column(BigInteger, ForeignKey('users.user_id'), primary_key=True, index=True)
     enable_report = Column(Boolean, default=True)
     enable_admin = Column(Boolean, default=False)
-    sector = Column(BigInteger)
+    sector_id = Column(BigInteger)
     
     # Relationship
     user = relationship("User", back_populates="status_info", lazy="selectin")
@@ -60,3 +60,10 @@ class Disease(Base):
     
     # Relationship
     user = relationship("User", back_populates="disease_info", lazy="selectin")
+
+class Sector(Base):
+    __tablename__ = "sectors"
+    
+    sector_id = Column(BigInteger, primary_key=True, index=True)
+    name = Column(String(255))
+    

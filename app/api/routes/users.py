@@ -35,7 +35,15 @@ async def create_user(
     if existing_user:
         raise HTTPException(status_code=400, detail="User already exists")
     
-    return await UserService.create_user(db, user_data, chat_id)
+    user = await UserService.create_user(db, user_data, chat_id)
+    
+    if not user:
+        raise HTTPException(
+            status_code=500, 
+            detail="Failed to create user due to database sequence issue. Please contact administrator."
+        )
+    
+    return user
 
 @router.put("/{user_id}", response_model=UserResponse)
 async def update_user(
@@ -67,27 +75,47 @@ async def update_user_health(
     health_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
-    """Обновить статус здоровья и заболевание пользователя"""
+    """Обновить статус здоровья пользователя"""
     from app.services.user_service import UserService
     
     status = health_data.get("status")
     disease = health_data.get("disease")
     
-    # Обновляем статус здоровья
-    if status:
-        await UserService.update_health_status(db, user_id, status)
+    if not status:
+        raise HTTPException(status_code=400, detail="Status is required")
     
-    # Обновляем заболевание
-    if disease:
+    # Обновляем статус здоровья
+    health, updated_disease = await UserService.update_health_status(
+        db, user_id, status, reset_disease=(status != "болен")
+    )
+    
+    # Если статус "болен" и указано заболевание - обновляем
+    if status == "болен" and disease:
         await UserService.update_disease(db, user_id, disease)
     
-    # Возвращаем обновленного пользователя
-    user = await UserService.get_user_by_id(db, user_id)
-    if not user:
+    # Возвращаем обновленного пользователя с деталями
+    user_details = await UserService.get_user_with_details(db, user_id)
+    if not user_details or not user_details.get("user"):
         raise HTTPException(status_code=404, detail="User not found")
     
-    return user
-
+    # Формируем ответ
+    response = {
+        "id": user_details["user"].id,
+        "user_id": user_details["user"].user_id,
+        "first_name": user_details["user"].first_name,
+        "last_name": user_details["user"].last_name,
+        "username": user_details["user"].username,
+        "created_at": user_details["user"].created_at,
+        "updated_at": user_details["user"].updated_at,
+        "health_info": {
+            "status": health.status if health else None
+        },
+        "disease_info": {
+            "disease": user_details["disease"].disease if user_details.get("disease") else ""
+        }
+    }
+    
+    return response
 # Альтернативно можно создать отдельные эндпоинты:
 @router.put("/{user_id}/health/status")
 async def update_health_status_only(
@@ -124,3 +152,106 @@ async def update_disease_only(
         raise HTTPException(status_code=404, detail="User not found")
     
     return updated_user
+
+@router.post("/register")
+async def register_user(
+    user_data: dict,
+    db: AsyncSession = Depends(get_db)
+):
+    """Упрощенный эндпоинт для регистрации пользователя"""
+    try:
+        user_id = user_data.get("user_id")
+        chat_id = user_data.get("chat_id")
+        first_name = user_data.get("first_name")
+        last_name = user_data.get("last_name")
+        username = user_data.get("username", "")
+        
+        if not all([user_id, chat_id, first_name, last_name]):
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        # Проверяем существование пользователя
+        existing_user = await UserService.get_user_by_id(db, user_id)
+        if existing_user:
+            return {
+                "status": "success", 
+                "message": "User already exists",
+                "user": existing_user
+            }
+        
+        # Создаем пользователя через UserService
+        user = await UserService.create_user(db, UserCreate(
+            user_id=user_id,
+            first_name=first_name,
+            last_name=last_name,
+            username=username
+        ), chat_id)
+        
+        if user:
+            return {
+                "status": "success",
+                "message": "User created successfully",
+                "user": user
+            }
+        else:
+            # Если не удалось создать через ORM, используем raw SQL
+            from sqlalchemy import text
+            
+            try:
+                # Создаем связанные записи
+                db_fio = FIO(
+                    user_id=user_id,
+                    first_name=first_name,
+                    last_name=last_name,
+                    patronymic_name=username or ""
+                )
+                db.add(db_fio)
+                
+                db_status = UserStatus(
+                    user_id=user_id,
+                    enable_report=True,
+                    enable_admin=False,
+                    sector_id=chat_id
+                )
+                db.add(db_status)
+                
+                db_health = Health(user_id=user_id, status="")
+                db.add(db_health)
+                
+                db_disease = Disease(user_id=user_id, disease="")
+                db.add(db_disease)
+                
+                # Используем SQL для обхода проблемы с последовательностью
+                await db.execute(
+                    text("""
+                        INSERT INTO users (user_id, first_name, last_name, username) 
+                        VALUES (:user_id, :first_name, :last_name, :username)
+                        ON CONFLICT (user_id) DO NOTHING
+                    """),
+                    {
+                        "user_id": user_id,
+                        "first_name": first_name,
+                        "last_name": last_name,
+                        "username": username
+                    }
+                )
+                
+                await db.commit()
+                
+                # Получаем пользователя
+                result = await db.execute(
+                    select(User).where(User.user_id == user_id)
+                )
+                user = result.scalar_one_or_none()
+                
+                return {
+                    "status": "success",
+                    "message": "User created via alternative method",
+                    "user": user
+                }
+                
+            except Exception as e:
+                await db.rollback()
+                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+                
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")

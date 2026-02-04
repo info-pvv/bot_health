@@ -2,7 +2,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from app.models.user import User, UserStatus, FIO, Health, Disease
+from app.models.user import User, UserStatus, FIO, Health, Disease, Sector
 from typing import List, Tuple, Dict, Optional
 from collections import defaultdict
 
@@ -62,7 +62,7 @@ class HealthService:
         )
         
         if sector_id:
-            query = query.where(UserStatus.sector == sector_id)
+            query = query.where(UserStatus.sector_id == sector_id)
         
         result = await db.execute(query)
         users_data = result.all()
@@ -79,9 +79,47 @@ class HealthService:
     @staticmethod
     async def get_all_sectors(db: AsyncSession) -> List[int]:
         result = await db.execute(
-            select(UserStatus.sector)
+            select(UserStatus.sector_id)
             .distinct()
             .where(UserStatus.enable_report == True)
-            .where(UserStatus.sector.isnot(None))
+            .where(UserStatus.sector_id.isnot(None))
         )
         return [row[0] for row in result.all()]
+    
+    @staticmethod
+    async def get_sector_name(db: AsyncSession, sector_id: int) -> Optional[str]:
+        """Получить название сектора по ID из таблицы sectors"""
+        if not sector_id:
+            return None
+        
+        try:
+            result = await db.execute(
+                select(Sector.name).where(Sector.sector_id == sector_id)
+            )
+            name = result.scalar_one_or_none()
+            return name or f"Сектор {sector_id}"
+        except Exception as e:
+            print(f"Ошибка при получении названия сектора {sector_id}: {e}")
+            return f"Сектор {sector_id}"
+    
+    @staticmethod
+    async def get_all_sectors_with_names(db: AsyncSession) -> List[dict]:
+        """Получить все сектора с названиями из таблицы sectors"""
+        try:
+            result = await db.execute(
+                select(Sector.sector_id, Sector.name)
+                .order_by(Sector.sector_id)
+            )
+            
+            sectors = []
+            for row in result.all():
+                sectors.append({
+                    "sector_id": row[0],
+                    "name": row[1] or f"Сектор {row[0]}"
+                })
+            
+            return sectors
+        except Exception as e:
+            print(f"Ошибка при получении секторов из БД: {e}")
+            # Fallback на случай ошибки
+            return []

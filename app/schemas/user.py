@@ -6,7 +6,7 @@ from datetime import datetime
 class UserStatusBase(BaseModel):
     enable_report: bool = True
     enable_admin: bool = False
-    sector: Optional[int] = None
+    sector_id: Optional[int] = None
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -46,7 +46,7 @@ class UserUpdate(BaseModel):
 class UserStatusUpdate(BaseModel):
     enable_report: Optional[bool] = None
     enable_admin: Optional[bool] = None
-    sector: Optional[int] = None
+    sector_id: Optional[int] = None
 
 class UserResponse(BaseModel):
     id: int

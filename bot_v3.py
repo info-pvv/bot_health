@@ -1,6 +1,7 @@
 # bot_v3.py - обновленная версия для работы с вашим API
 import asyncio
 import logging
+from typing import Optional 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -39,9 +40,20 @@ def format_report(report_data: dict) -> str:
     summary = report_data.get("status_summary", {})
     users = report_data.get("users", [])
     total = report_data.get("total", 0)
+    sector_info = report_data.get("sector_info", {})
     
-    # Формируем сообщение
-    message = "📊 **ОТЧЕТ ПО СОТРУДНИКАМ**\n\n"
+    # Определяем заголовок
+    sector_name = sector_info.get("name") if sector_info else None
+    sector_id = sector_info.get("sector_id") if sector_info else None
+    
+    if sector_name:
+        header = f"📊 **ОТЧЕТ: {sector_name}**\n\n"
+    elif sector_id:
+        header = f"📊 **ОТЧЕТ: Сектор {sector_id}**\n\n"
+    else:
+        header = "📊 **ОТЧЕТ ПО ВСЕМ СЕКТОРАМ**\n\n"
+    
+    message = header
     
     # Сводка по статусам
     message += "**Статистика:**\n"
@@ -60,12 +72,12 @@ def format_report(report_data: dict) -> str:
             emoji = status_emojis.get(status, "📝")
             message += f"{emoji} {status.capitalize()}: {count}\n"
     
-    message += f"\n**Всего сотрудников в отчете:** {total}\n"
+    message += f"\n**Всего сотрудников:** {total}\n"
     
-    # Список сотрудников (первые 20 чтобы не перегружать)
+    # Список сотрудников
     if users:
         message += "\n**Сотрудники:**\n"
-        for i, user in enumerate(users[:20], 1):
+        for i, user in enumerate(users[:15], 1):
             name = f"{user.get('first_name', '')} {user.get('last_name', '')}".strip() or "Без имени"
             status = user.get('status', 'не указан')
             disease = user.get('disease', '')
@@ -79,12 +91,11 @@ def format_report(report_data: dict) -> str:
                 message += f" ({disease})"
             message += "\n"
         
-        if len(users) > 20:
-            message += f"\n... и еще {len(users) - 20} сотрудников"
+        if len(users) > 15:
+            message += f"\n... и еще {len(users) - 15} сотрудников"
     
     return message
 
-# Функция для форматирования информации о пользователе
 def format_user_info(user_data: dict) -> str:
     """Форматировать информацию о пользователе"""
     if "error" in user_data:
@@ -138,7 +149,11 @@ def format_user_info(user_data: dict) -> str:
     updated_at = user_data.get("updated_at", "")
     
     if created_at:
-        message += f"\n📅 Зарегистрирован: {created_at[:10]}"
+        # Форматируем дату (убираем микросекунды если есть)
+        created_str = str(created_at)
+        if '.' in created_str:
+            created_str = created_str.split('.')[0]
+        message += f"\n📅 Зарегистрирован: {created_str}"
     
     return message
 
@@ -182,7 +197,9 @@ async def cmd_start(message: types.Message, state: FSMContext):
         # Пользователь уже в системе
         keyboard = types.ReplyKeyboardMarkup(
             keyboard=[
-                [types.KeyboardButton(text="📊 Получить отчет")],
+                [types.KeyboardButton(text="📊 Отчет по моему сектору")],
+                [types.KeyboardButton(text="📈 Отчет по всем секторам")],
+                [types.KeyboardButton(text="🏢 Список секторов")],
                 [types.KeyboardButton(text="💊 Отметить статус здоровья")],
                 [types.KeyboardButton(text="👤 Моя информация")],
                 [types.KeyboardButton(text="❌ Отменить действие")]
@@ -237,9 +254,10 @@ async def process_last_name(message: types.Message, state: FSMContext):
     user_data = await state.get_data()
     first_name = user_data.get("first_name", "")
     
-    # Создаем пользователя через API
-    user_info = {
+    # Подготавливаем данные для регистрации
+    registration_data = {
         "user_id": message.from_user.id,
+        "chat_id": message.chat.id,
         "first_name": first_name,
         "last_name": last_name,
         "username": message.from_user.username or ""
@@ -247,7 +265,8 @@ async def process_last_name(message: types.Message, state: FSMContext):
     
     await message.answer("⏳ Регистрирую в системе...")
     
-    result = await api_client.create_user(user_info, chat_id=message.chat.id)
+    # Используем упрощенный метод регистрации
+    result = await api_client.register_user(registration_data)
     
     if "error" in result:
         await message.answer(
@@ -259,7 +278,9 @@ async def process_last_name(message: types.Message, state: FSMContext):
         # Регистрация успешна
         keyboard = types.ReplyKeyboardMarkup(
             keyboard=[
-                [types.KeyboardButton(text="📊 Получить отчет")],
+                [types.KeyboardButton(text="📊 Отчет по моему сектору")],
+                [types.KeyboardButton(text="📈 Отчет по всем секторам")],
+                [types.KeyboardButton(text="🏢 Список секторов")],
                 [types.KeyboardButton(text="💊 Отметить статус здоровья")],
                 [types.KeyboardButton(text="👤 Моя информация")],
                 [types.KeyboardButton(text="❌ Отменить действие")]
@@ -277,19 +298,41 @@ async def process_last_name(message: types.Message, state: FSMContext):
     
     await state.clear()
     await state.set_state(ActionStates.waiting_for_action)
-
+    
 # Получение отчета через API
-@dp.message(ActionStates.waiting_for_action, F.text == "📊 Получить отчет")
+@dp.message(ActionStates.waiting_for_action, F.text == "📊 Отчет по моему сектору")
 async def cmd_report_api(message: types.Message):
-    await message.answer("⏳ Загружаю отчет...")
+    await message.answer("⏳ Загружаю отчет для вашего сектора...")
     
-    # Получаем отчет через API
-    report_data = await api_client.get_report()
+    # Получаем отчет через API с названием сектора
+    report_data = await api_client.get_report(user_id=message.from_user.id)
     
-    # Форматируем и отправляем отчет
+    # Форматируем отчет (теперь функция возвращает просто строку)
     formatted_report = format_report(report_data)
     
-    # Разбиваем длинные сообщения (Telegram имеет лимит 4096 символов)
+    # Разбиваем длинные сообщения
+    if len(formatted_report) > 4000:
+        parts = [formatted_report[i:i+4000] for i in range(0, len(formatted_report), 4000)]
+        for part in parts:
+            await message.answer(part, parse_mode="Markdown")
+    else:
+        await message.answer(formatted_report, parse_mode="Markdown")
+
+@dp.message(ActionStates.waiting_for_action, F.text == "📈 Отчет по всем секторам")
+async def cmd_report_all_sectors(message: types.Message):
+    await message.answer("⏳ Загружаю отчет по всем секторам...")
+    
+    # Получаем отчет без фильтрации по сектору
+    report_data = await api_client.get_report()  # Без параметров
+    
+    # Форматируем отчет
+    formatted_report = format_report(report_data)
+    
+    # Убедимся, что заголовок правильный (опционально)
+    # Если функция уже добавляет правильный заголовок, это не нужно
+    # formatted_report = "📈 **ОТЧЕТ ПО ВСЕМ СЕКТОРАМ**\n\n" + formatted_report
+    
+    # Разбиваем длинные сообщения
     if len(formatted_report) > 4000:
         parts = [formatted_report[i:i+4000] for i in range(0, len(formatted_report), 4000)]
         for part in parts:
@@ -334,12 +377,15 @@ async def process_healthy_status_api(message: types.Message, state: FSMContext):
     # Отправляем статус в API
     result = await api_client.update_health_status(
         user_id=message.from_user.id,
-        status=status
+        status=status,
+        disease=""
     )
     
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="📊 Получить отчет")],
+            [types.KeyboardButton(text="📊 Отчет по моему сектору")],
+            [types.KeyboardButton(text="📈 Отчет по всем секторам")],
+            [types.KeyboardButton(text="🏢 Список секторов")],
             [types.KeyboardButton(text="💊 Отметить статус здоровья")],
             [types.KeyboardButton(text="👤 Моя информация")],
             [types.KeyboardButton(text="❌ Отменить действие")]
@@ -412,7 +458,9 @@ async def process_disease_api(message: types.Message, state: FSMContext):
     
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="📊 Получить отчет")],
+            [types.KeyboardButton(text="📊 Отчет по моему сектору")],
+            [types.KeyboardButton(text="📈 Отчет по всем секторам")],
+            [types.KeyboardButton(text="🏢 Список секторов")],
             [types.KeyboardButton(text="💊 Отметить статус здоровья")],
             [types.KeyboardButton(text="👤 Моя информация")],
             [types.KeyboardButton(text="❌ Отменить действие")]
@@ -466,7 +514,8 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
     
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[
-            [types.KeyboardButton(text="📊 Получить отчет")],
+            [types.KeyboardButton(text="📊 Отчет по моему сектору")],
+            [types.KeyboardButton(text="📈 Отчет по всем секторам")],
             [types.KeyboardButton(text="💊 Отметить статус здоровья")],
             [types.KeyboardButton(text="👤 Моя информация")],
             [types.KeyboardButton(text="❌ Отменить действие")]
@@ -510,7 +559,94 @@ async def cmd_help(message: types.Message):
     )
     
     await message.answer(help_text, parse_mode="Markdown")
+@dp.message(ActionStates.waiting_for_action, F.text == "👑 Админ панель")
+async def cmd_admin_panel(message: types.Message, state: FSMContext):
+    # Проверяем, является ли пользователь админом
+    user_info = await api_client.get_user(message.from_user.id)
+    
+    if "error" in user_info:
+        await message.answer("❌ Не удалось проверить права доступа.")
+        return
+    
+    is_admin = user_info.get("status_info", {}).get("enable_admin", False)
+    
+    if not is_admin:
+        await message.answer("❌ У вас нет прав администратора.")
+        return
+    
+    keyboard = types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="📊 Отчет по сектору"), types.KeyboardButton(text="📈 Отчет по всем")],
+            [types.KeyboardButton(text="🔍 Поиск по сотруднику")],
+            [types.KeyboardButton(text="⚙️ Управление секторами")],
+            [types.KeyboardButton(text="⬅️ Назад в меню")]
+        ],
+        resize_keyboard=True
+    )
+    
+    await message.answer(
+        "👑 **Административная панель**\n\n"
+        "Выберите действие:",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
 
+# Обработчик отчета по конкретному сектору (для админов)
+@dp.message(F.text == "📊 Отчет по сектору")
+async def cmd_report_by_sector(message: types.Message, state: FSMContext):
+    await message.answer(
+        "Введите ID сектора для отчета:",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.set_state("waiting_for_sector_id")
+
+@dp.message(F.text.regexp(r'^\d+$'), F.state == "waiting_for_sector_id")
+async def process_sector_id(message: types.Message, state: FSMContext):
+    sector_id = int(message.text)
+    await message.answer(f"⏳ Загружаю отчет для сектора {sector_id}...")
+    
+    report_data = await api_client.get_report(sector_id=sector_id)
+    formatted_report = format_report(report_data)
+    formatted_report = f"🏢 **ОТЧЕТ ПО СЕКТОРУ {sector_id}**\n\n" + formatted_report[formatted_report.find("\n\n")+2:]
+    
+    if len(formatted_report) > 4000:
+        parts = [formatted_report[i:i+4000] for i in range(0, len(formatted_report), 4000)]
+        for part in parts:
+            await message.answer(part, parse_mode="Markdown")
+    else:
+        await message.answer(formatted_report, parse_mode="Markdown")
+    
+    await state.clear()
+    await state.set_state(ActionStates.waiting_for_action)
+@dp.message(ActionStates.waiting_for_action, F.text == "🏢 Список секторов")
+async def cmd_list_sectors(message: types.Message):
+    await message.answer("⏳ Загружаю список секторов...")
+    
+    sectors_data = await api_client.get_sectors()
+    
+    if "error" in sectors_data:
+        await message.answer(f"❌ Ошибка: {sectors_data['error']}")
+        return
+    
+    sectors = sectors_data.get("sectors", [])
+    
+    if not sectors:
+        await message.answer("📭 Секторы не найдены")
+        return
+    
+    message_text = "🏢 **СПИСОК СЕКТОРОВ**\n\n"
+    
+    for sector in sectors:
+        sector_id = sector.get("sector_id")
+        name = sector.get("name", f"Сектор {sector_id}")
+        #description = sector.get("description", "")
+        
+        message_text += f"**{sector_id}. {name}**\n"
+        #if description:
+        #    message_text += f"   📝 {description}\n"
+        message_text += "\n"
+    
+    await message.answer(message_text, parse_mode="Markdown")
 # Главная функция
 async def main():
     print("🤖 Запуск Telegram бота с API...")
