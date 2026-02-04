@@ -1,5 +1,6 @@
+# app/schemas/health.py
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, List  # Добавьте все необходимые импорты
 
 class HealthBase(BaseModel):
     user_id: int
@@ -29,6 +30,6 @@ class ReportRequest(BaseModel):
     sector_id: Optional[int] = None
 
 class ReportResponse(BaseModel):
-    status_summary: dict
-    users: list
+    status_summary: Dict[str, int]
+    users: List[dict]
     total: int

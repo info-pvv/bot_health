@@ -1,6 +1,7 @@
+# app/api/routes/users.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List  # Добавьте импорт
 from app.models.database import get_db
 from app.services.user_service import UserService
 from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserStatusUpdate

@@ -1,9 +1,10 @@
+# app/services/health_service.py
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from app.models.user import User, UserStatus, FIO, Health, Disease
 from app.schemas.health import HealthUpdate, DiseaseUpdate
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional  # Добавьте Optional здесь
 from collections import defaultdict
 
 class HealthService:

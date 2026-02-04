@@ -1,18 +1,34 @@
+# main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.api.routes import health, users, admin
-from app.models.database import engine, Base
+from app.models.database import  init_database, engine, Base
+from app.core.config import settings
 import uvicorn
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Создание таблиц при старте
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Инициализация PostgreSQL
+    print(f"🔗 Подключение к PostgreSQL: {settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}")
+    
+    # Создаем БД если не существует
+    if await init_database():
+        print("✅ База данных готова")
+        
+        # Создаем таблицы
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("✅ Таблицы созданы")
+    else:
+        print("❌ Ошибка инициализации базы данных")
+        print("💡 Проверьте что PostgreSQL запущен и доступен")
+    
     yield
-    # Очистка при завершении
+    
+    # Закрываем соединения
     await engine.dispose()
+
 
 app = FastAPI(
     title="Employee Health Tracker API",
@@ -31,9 +47,11 @@ app.add_middleware(
 )
 
 # Подключение роутеров
-app.include_router(health.router)
-app.include_router(users.router)
-app.include_router(admin.router)
+from app.api.routes import health_router, users_router, admin_router
+
+app.include_router(health_router)
+app.include_router(users_router)
+app.include_router(admin_router)
 
 @app.get("/")
 async def root():

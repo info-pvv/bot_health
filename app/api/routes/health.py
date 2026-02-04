@@ -1,6 +1,7 @@
+# app/api/routes/health.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Optional  # Добавьте импорт
 from app.models.database import get_db
 from app.services.health_service import HealthService
 from app.schemas.health import ReportResponse, ReportRequest

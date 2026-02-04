@@ -3,7 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.models.user import User, UserStatus, FIO, Health, Disease
 from app.schemas.user import UserCreate, UserUpdate, UserStatusUpdate
-from typing import Optional, List
+from typing import Optional, List  # Добавьте импорты
 
 class UserService:
     @staticmethod
