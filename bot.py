@@ -21,21 +21,32 @@ dp = Dispatcher(storage=storage)
 class HealthStates(StatesGroup):
     waiting_for_status = State()
     waiting_for_disease = State()
+    
+class ActionStates(StatesGroup):
+    waiting_for_action = State()
+    
 
 # Команда /start
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
-    await message.answer(
-        "👋 Привет! Я бот для отслеживания здоровья сотрудников.\n\n"
-        "Доступные команды:\n"
-        "/start - Запустить бота\n"
-        "/health - Отметить статус здоровья\n"
-        "/report - Получить отчет\n"
-        "/cancel - Отменить текущее действие"
+async def cmd_start(message: types.Message,state: FSMContext):
+    keyboard = types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="Отметить статус здоровья")],
+            [types.KeyboardButton(text="Получить отчет")],
+            [types.KeyboardButton(text="Отменить текущее действие")]
+        ],
+        resize_keyboard=True
     )
+    
+    await message.answer(
+        "👋 Привет! Я бот для отслеживания здоровья сотрудников.\n\n",
+        reply_markup=keyboard
+    )
+    await state.set_state(ActionStates.waiting_for_action)
+
 
 # Команда /health
-@dp.message(Command("health"))
+@dp.message(ActionStates.waiting_for_action, F.text == "Отметить статус здоровья")
 async def cmd_health(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[
@@ -105,18 +116,22 @@ async def process_disease(message: types.Message, state: FSMContext):
     logger.info(f"User {message.from_user.id} has disease: {disease}")
 
 # Команда /report
-@dp.message(Command("report"))
+@dp.message(ActionStates.waiting_for_action, F.text == "Получить отчет")
+#@dp.message(Command("report"))
 async def cmd_report(message: types.Message):
     await message.answer(
         "📊 Отчет по сотрудникам:\n"
         "Здоровых: 10\n"
         "Больных: 2\n"
         "В отпуске: 3\n"
-        "Всего: 15"
+        "Всего: 15",
+        reply_markup=types.ReplyKeyboardRemove()
     )
 
+
 # Команда /cancel
-@dp.message(Command("cancel"))
+@dp.message(ActionStates.waiting_for_action, F.text == "Отменить текущее действие")
+#@dp.message(Command("cancel"))
 async def cmd_cancel(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(
