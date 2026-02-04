@@ -64,15 +64,14 @@ async def update_user_status(
 @router.put("/{user_id}/health")
 async def update_user_health(
     user_id: int,
-    health_update: dict,  # Принимаем словарь напрямую для гибкости
+    health_data: dict,
     db: AsyncSession = Depends(get_db)
 ):
     """Обновить статус здоровья и заболевание пользователя"""
     from app.services.user_service import UserService
     
-    # Получаем данные из запроса
-    status = health_update.get("status")
-    disease = health_update.get("disease")
+    status = health_data.get("status")
+    disease = health_data.get("disease")
     
     # Обновляем статус здоровья
     if status:
@@ -83,11 +82,11 @@ async def update_user_health(
         await UserService.update_disease(db, user_id, disease)
     
     # Возвращаем обновленного пользователя
-    updated_user = await UserService.get_user_by_id(db, user_id)
-    if not updated_user:
+    user = await UserService.get_user_by_id(db, user_id)
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    return updated_user
+    return user
 
 # Альтернативно можно создать отдельные эндпоинты:
 @router.put("/{user_id}/health/status")
