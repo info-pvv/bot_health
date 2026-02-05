@@ -31,10 +31,16 @@ from bot.handlers.report import (
 
 # Импорт обработчиков из admin.py
 from bot.handlers.admin import (
-    cmd_admin_panel, admin_report_by_sector, 
-    process_admin_sector_id, admin_user_info,
-    process_admin_user_id, process_toggle_action,
-    admin_statistics, back_to_admin_panel
+    cmd_admin_panel, 
+    admin_search_user,
+    admin_select_sector,
+    admin_general_report,
+    admin_statistics,
+    process_user_search,
+    process_toggle_action,
+    cmd_user_info,
+    cmd_sector_report,
+    admin_back_to_main_menu  # переименовали для ясности
 )
 
 # Настройка логирования
@@ -89,14 +95,18 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     dp.message.register(cmd_admin_panel, ActionStates.waiting_for_action, F.text == "👑 Админ панель")
     
     # Админ команды
-    dp.message.register(admin_report_by_sector, AdminStates.waiting_admin_command, F.text == "📊 Отчет по сектору")
-    dp.message.register(admin_user_info, AdminStates.waiting_admin_command, F.text == "👤 Инфо о пользователе")
+    dp.message.register(admin_search_user, AdminStates.waiting_admin_command, F.text == "🔍 Найти сотрудника")
+    dp.message.register(admin_select_sector, AdminStates.waiting_admin_command, F.text == "📊 Отчет по сектору")
+    dp.message.register(admin_general_report, AdminStates.waiting_admin_command, F.text == "📈 Общий отчет")
     dp.message.register(admin_statistics, AdminStates.waiting_admin_command, F.text == "📋 Статистика")
-    dp.message.register(back_to_admin_panel, AdminStates.waiting_admin_command, F.text == "⬅️ Назад в меню")
+    dp.message.register(admin_back_to_main_menu, AdminStates.waiting_admin_command, F.text == "⬅️ Главное меню")
     
     # Админ состояния
-    dp.message.register(process_admin_sector_id, AdminStates.waiting_sector_id)
-    dp.message.register(process_admin_user_id, AdminStates.waiting_user_id)
+    dp.message.register(process_user_search, AdminStates.waiting_user_query)
+    
+    # Команды админа
+    dp.message.register(cmd_user_info, Command("user_info"))
+    dp.message.register(cmd_sector_report, Command("sector_report"))
     
     # Callback обработчики
     dp.callback_query.register(process_toggle_action, F.data.startswith("toggle_"))

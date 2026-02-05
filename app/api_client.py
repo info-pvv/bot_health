@@ -184,6 +184,57 @@ class APIClient:
         except Exception as e:
             return {"error": f"Connection error: {str(e)}"}
 
+    async def search_users(self, query: str) -> Dict[str, Any]:
+        """Поиск пользователей по имени, фамилии или username"""
+        session = await self.get_session()
+        
+        try:
+            # Используем эндпоинт /users/ с параметрами поиска
+            params = {"search": query, "limit": 10}
+            async with session.get("/users/", params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+    
+    async def search_users_by_name(self, name: str) -> Dict[str, Any]:
+        """Поиск пользователей по имени или фамилии"""
+        return await self.search_users(name)
+
+    async def get_all_users(self, skip: int = 0, limit: int = 100) -> Dict[str, Any]:
+        """Получить всех пользователей"""
+        session = await self.get_session()
+        url = "/users/"
+        params = {"skip": skip, "limit": limit}
+        
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+    
+    async def search_users_api(self, query: str, skip: int = 0, limit: int = 10) -> Dict[str, Any]:
+        """Поиск пользователей через API"""
+        session = await self.get_session()
+        url = "/users/search/"
+        params = {"q": query, "skip": skip, "limit": limit}
+        
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
 
 # Глобальный экземпляр клиента
 api_client = APIClient()

@@ -18,3 +18,6 @@ class AdminStates(StatesGroup):
     waiting_admin_command = State()
     waiting_user_id = State()
     waiting_sector_id = State()
+    waiting_user_query = State()  # ДОБАВЛЕНО
+    waiting_user_selection = State()  # ДОБАВЛЕНО
+    waiting_sector_selection = State()  # ДОБАВЛЕНО

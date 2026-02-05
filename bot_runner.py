@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Отдельный скрипт для запуска Telegram бота
+Скрипт для запуска Telegram бота
 """
 import asyncio
 import sys
 import os
 
-# Добавляем путь к проекту
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, project_root)
+# Добавляем текущую директорию в путь
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 async def run_bot():
     """Запустить бота"""
@@ -20,3 +19,9 @@ if __name__ == "__main__":
         asyncio.run(run_bot())
     except KeyboardInterrupt:
         print("\n👋 Бот остановлен")
+    except Exception as e:
+        print(f"❌ Ошибка при запуске бота: {e}")
+        print("\n💡 Проверьте:")
+        print("1. Наличие файла .env с TELEGRAM_TOKEN")
+        print("2. Запущен ли FastAPI сервер (python main.py)")
+        print("3. Установлены ли зависимости: pip install aiogram aiohttp python-dotenv")

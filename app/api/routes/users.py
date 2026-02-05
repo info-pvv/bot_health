@@ -1,11 +1,11 @@
-# app/api/routes/users.py
-from fastapi import APIRouter, Depends, HTTPException
+# app/api/routes/users.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List  # Добавьте импорт
+from typing import List, Optional
 from app.models.database import get_db
 from app.services.user_service import UserService
 from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserStatusUpdate
-from app.schemas.health import HealthUpdate, DiseaseUpdate 
+from app.schemas.health import HealthUpdate, DiseaseUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -116,7 +116,7 @@ async def update_user_health(
     }
     
     return response
-# Альтернативно можно создать отдельные эндпоинты:
+
 @router.put("/{user_id}/health/status")
 async def update_health_status_only(
     user_id: int,
@@ -198,6 +198,8 @@ async def register_user(
             
             try:
                 # Создаем связанные записи
+                from app.models.user import FIO, UserStatus, Health, Disease, User
+                
                 db_fio = FIO(
                     user_id=user_id,
                     first_name=first_name,
@@ -238,6 +240,7 @@ async def register_user(
                 await db.commit()
                 
                 # Получаем пользователя
+                from sqlalchemy import select
                 result = await db.execute(
                     select(User).where(User.user_id == user_id)
                 )
@@ -255,3 +258,50 @@ async def register_user(
                 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+
+# ДОБАВЛЕННЫЙ ЭНДПОИНТ ДЛЯ ПОИСКА
+@router.get("/search/")
+async def search_users(
+    q: str = Query(..., min_length=2, description="Поисковый запрос"),
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db)
+):
+    """Поиск пользователей по имени, фамилии или username"""
+    from sqlalchemy import or_, select
+    from app.models.user import User, FIO
+    
+    # Создаем запрос с JOIN
+    query = (
+        select(User)
+        .join(FIO, FIO.user_id == User.user_id)
+        .where(
+            or_(
+                User.first_name.ilike(f"%{q}%"),
+                User.last_name.ilike(f"%{q}%"),
+                User.username.ilike(f"%{q}%"),
+                FIO.first_name.ilike(f"%{q}%"),
+                FIO.last_name.ilike(f"%{q}%")
+            )
+        )
+        .offset(skip)
+        .limit(limit)
+    )
+    
+    result = await db.execute(query)
+    users = result.scalars().all()
+    
+    # Форматируем ответ
+    users_list = []
+    for user in users:
+        users_list.append({
+            "id": user.id,
+            "user_id": user.user_id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "username": user.username,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        })
+    
+    return {"users": users_list, "total": len(users_list), "query": q}
