@@ -143,7 +143,7 @@ class APIClient:
         """Зарегистрировать пользователя (упрощенный метод)"""
         session = await self.get_session()
         url = "/users/register"
-        
+
         try:
             async with session.post(url, json=user_data) as response:
                 if response.status == 200:
@@ -153,6 +153,37 @@ class APIClient:
                     return {"error": f"API error {response.status}: {error_text}"}
         except Exception as e:
             return {"error": f"Connection error: {str(e)}"}
+
+    async def toggle_user_report(self, user_id: int) -> Dict[str, Any]:
+        """Переключить статус отчетов пользователя"""
+        session = await self.get_session()
+        url = f"/admin/users/{user_id}/toggle-report"
+        
+        try:
+            async with session.put(url) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+    
+    async def toggle_user_admin(self, user_id: int) -> Dict[str, Any]:
+        """Переключить админ статус пользователя"""
+        session = await self.get_session()
+        url = f"/admin/users/{user_id}/toggle-admin"
+        
+        try:
+            async with session.put(url) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
 
 # Глобальный экземпляр клиента
 api_client = APIClient()

@@ -1,4 +1,4 @@
-# bot_v3.py - обновленная версия для работы с вашим API
+# bot_v3.py - исправленная версия с правильными сигнатурами обработчиков
 import asyncio
 import logging
 from typing import Optional 
@@ -7,8 +7,10 @@ from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from app.api_client import api_client
 from config import TOKEN
+import aiohttp
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +32,42 @@ class ActionStates(StatesGroup):
 class RegistrationStates(StatesGroup):
     waiting_for_first_name = State()
     waiting_for_last_name = State()
+
+class AdminStates(StatesGroup):
+    waiting_admin_command = State()
+    waiting_user_id = State()
+    waiting_sector_id = State()
+    waiting_search_query = State()
+    waiting_new_sector_name = State()
+    waiting_edit_sector = State()
+
+# Функция для проверки прав администратора
+async def check_admin(user_id: int) -> bool:
+    """Проверить, является ли пользователь администратором"""
+    user_info = await api_client.get_user(user_id)
+    
+    if "error" in user_info:
+        return False
+    
+    # Проверяем поле enable_admin в status_info
+    status_info = user_info.get("status_info", {})
+    is_admin = status_info.get("enable_admin", False)
+    
+    return is_admin
+
+# Исправленный декоратор для защиты админских команд
+def admin_only(handler):
+    async def wrapper(message: types.Message, state: FSMContext):
+        if not await check_admin(message.from_user.id):
+            await message.answer(
+                "⛔ **Доступ запрещен!**\n\n"
+                "У вас нет прав администратора.\n"
+                "Для получения доступа обратитесь к администратору системы.",
+                parse_mode="Markdown"
+            )
+            return
+        return await handler(message, state)
+    return wrapper
 
 # Функция для форматирования отчета
 def format_report(report_data: dict) -> str:
@@ -101,13 +139,15 @@ def format_user_info(user_data: dict) -> str:
     if "error" in user_data:
         return f"❌ Ошибка: {user_data['error']}"
     
-    message = "👤 **ВАША ИНФОРМАЦИЯ**\n\n"
+    message = "👤 **ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ**\n\n"
     
     # Основная информация
     first_name = user_data.get("first_name", "Не указано")
     last_name = user_data.get("last_name", "Не указано")
     username = user_data.get("username", "Не указано")
+    user_id = user_data.get("user_id", "Не указано")
     
+    message += f"**ID:** {user_id}\n"
     message += f"**Имя:** {first_name}\n"
     message += f"**Фамилия:** {last_name}\n"
     message += f"**Username:** {username}\n"
@@ -139,17 +179,18 @@ def format_user_info(user_data: dict) -> str:
     if status_info:
         enable_report = status_info.get("enable_report", False)
         enable_admin = status_info.get("enable_admin", False)
+        sector_id = status_info.get("sector_id", "Не указан")
         
-        message += f"\n**Права:**\n"
+        message += f"\n**Настройки доступа:**\n"
         message += f"📊 Отчеты: {'✅ Включены' if enable_report else '❌ Выключены'}\n"
         message += f"👑 Админ: {'✅ Да' if enable_admin else '❌ Нет'}\n"
+        message += f"🏢 Сектор: {sector_id}\n"
     
     # Даты
     created_at = user_data.get("created_at", "")
     updated_at = user_data.get("updated_at", "")
     
     if created_at:
-        # Форматируем дату (убираем микросекунды если есть)
         created_str = str(created_at)
         if '.' in created_str:
             created_str = created_str.split('.')[0]
@@ -194,22 +235,34 @@ async def cmd_start(message: types.Message, state: FSMContext):
         )
         await state.set_state(ActionStates.waiting_for_action)
     else:
-        # Пользователь уже в системе
+        # Проверяем права администратора
+        is_admin = await check_admin(message.from_user.id)
+        
+        # Основная клавиатура
+        keyboard_buttons = [
+            [types.KeyboardButton(text="📊 Отчет по моему сектору")],
+            [types.KeyboardButton(text="📈 Отчет по всем секторам")],
+            [types.KeyboardButton(text="🏢 Список секторов")],
+            [types.KeyboardButton(text="💊 Отметить статус здоровья")],
+            [types.KeyboardButton(text="👤 Моя информация")]
+        ]
+        
+        # Добавляем админ-панель если пользователь админ
+        if is_admin:
+            keyboard_buttons.append([types.KeyboardButton(text="👑 Админ панель")])
+        
+        keyboard_buttons.append([types.KeyboardButton(text="❌ Отменить действие")])
+        
         keyboard = types.ReplyKeyboardMarkup(
-            keyboard=[
-                [types.KeyboardButton(text="📊 Отчет по моему сектору")],
-                [types.KeyboardButton(text="📈 Отчет по всем секторам")],
-                [types.KeyboardButton(text="🏢 Список секторов")],
-                [types.KeyboardButton(text="💊 Отметить статус здоровья")],
-                [types.KeyboardButton(text="👤 Моя информация")],
-                [types.KeyboardButton(text="❌ Отменить действие")]
-            ],
+            keyboard=keyboard_buttons,
             resize_keyboard=True
         )
         
         first_name = user_info.get("first_name", "Сотрудник")
+        admin_text = "\n👑 Вы являетесь администратором системы." if is_admin else ""
+        
         await message.answer(
-            f"👋 **С возвращением, {first_name}!**\n\n"
+            f"👋 **С возвращением, {first_name}!**{admin_text}\n\n"
             "Выберите действие из меню ниже:",
             reply_markup=keyboard,
             parse_mode="Markdown"
@@ -298,7 +351,7 @@ async def process_last_name(message: types.Message, state: FSMContext):
     
     await state.clear()
     await state.set_state(ActionStates.waiting_for_action)
-    
+
 # Получение отчета через API
 @dp.message(ActionStates.waiting_for_action, F.text == "📊 Отчет по моему сектору")
 async def cmd_report_api(message: types.Message):
@@ -307,7 +360,7 @@ async def cmd_report_api(message: types.Message):
     # Получаем отчет через API с названием сектора
     report_data = await api_client.get_report(user_id=message.from_user.id)
     
-    # Форматируем отчет (теперь функция возвращает просто строку)
+    # Форматируем отчет
     formatted_report = format_report(report_data)
     
     # Разбиваем длинные сообщения
@@ -323,16 +376,11 @@ async def cmd_report_all_sectors(message: types.Message):
     await message.answer("⏳ Загружаю отчет по всем секторам...")
     
     # Получаем отчет без фильтрации по сектору
-    report_data = await api_client.get_report()  # Без параметров
+    report_data = await api_client.get_report()
     
     # Форматируем отчет
     formatted_report = format_report(report_data)
     
-    # Убедимся, что заголовок правильный (опционально)
-    # Если функция уже добавляет правильный заголовок, это не нужно
-    # formatted_report = "📈 **ОТЧЕТ ПО ВСЕМ СЕКТОРАМ**\n\n" + formatted_report
-    
-    # Разбиваем длинные сообщения
     if len(formatted_report) > 4000:
         parts = [formatted_report[i:i+4000] for i in range(0, len(formatted_report), 4000)]
         for part in parts:
@@ -507,19 +555,360 @@ async def cmd_my_info(message: types.Message):
         formatted_info = format_user_info(user_info)
         await message.answer(formatted_info, parse_mode="Markdown")
 
+# АДМИН ПАНЕЛЬ
+@dp.message(ActionStates.waiting_for_action, F.text == "👑 Админ панель")
+@admin_only
+async def cmd_admin_panel(message: types.Message, state: FSMContext):
+    keyboard = types.ReplyKeyboardMarkup(
+        keyboard=[
+            [types.KeyboardButton(text="📊 Отчет по сектору"), types.KeyboardButton(text="📈 Отчет по всем")],
+            [types.KeyboardButton(text="👤 Инфо о пользователе")],
+            [types.KeyboardButton(text="✅ Вкл/выкл отчеты"), types.KeyboardButton(text="👑 Дать/забрать админа")],
+            [types.KeyboardButton(text="📋 Статистика")],
+            [types.KeyboardButton(text="⬅️ Назад в меню")]
+        ],
+        resize_keyboard=True
+    )
+    
+    await message.answer(
+        "👑 **АДМИНИСТРАТИВНАЯ ПАНЕЛЬ**\n\n"
+        "Выберите действие:",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    await state.set_state(AdminStates.waiting_admin_command)
+
+# Отчет по конкретному сектору
+@dp.message(AdminStates.waiting_admin_command, F.text == "📊 Отчет по сектору")
+async def admin_report_by_sector(message: types.Message, state: FSMContext):
+    await message.answer(
+        "Введите **ID сектора** для отчета:",
+        parse_mode="Markdown",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.set_state(AdminStates.waiting_sector_id)
+
+@dp.message(AdminStates.waiting_sector_id)
+async def process_admin_sector_id(message: types.Message, state: FSMContext):
+    try:
+        sector_id = int(message.text.strip())
+        await message.answer(f"⏳ Загружаю отчет для сектора {sector_id}...")
+        
+        report_data = await api_client.get_report(sector_id=sector_id)
+        formatted_report = format_report(report_data)
+        
+        # Улучшаем заголовок
+        if "ОТЧЕТ: Сектор" in formatted_report:
+            formatted_report = formatted_report.replace(
+                "ОТЧЕТ: Сектор", 
+                f"ОТЧЕТ ПО СЕКТОРУ {sector_id}"
+            )
+        
+        if len(formatted_report) > 4000:
+            parts = [formatted_report[i:i+4000] for i in range(0, len(formatted_report), 4000)]
+            for part in parts:
+                await message.answer(part, parse_mode="Markdown")
+        else:
+            await message.answer(formatted_report, parse_mode="Markdown")
+        
+    except ValueError:
+        await message.answer("❌ Неверный формат ID. Введите число.")
+        return
+    
+    # Возвращаем в админ панель
+    await cmd_admin_panel(message, state)
+
+# Поиск пользователя по ID
+@dp.message(AdminStates.waiting_admin_command, F.text == "👤 Инфо о пользователе")
+async def admin_user_info(message: types.Message, state: FSMContext):
+    await message.answer(
+        "Введите **ID пользователя** для просмотра информации:",
+        parse_mode="Markdown",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.set_state(AdminStates.waiting_user_id)
+
+@dp.message(AdminStates.waiting_user_id)
+async def process_admin_user_id(message: types.Message, state: FSMContext):
+    try:
+        user_id = int(message.text.strip())
+        await message.answer(f"⏳ Ищу пользователя с ID {user_id}...")
+        
+        user_info = await api_client.get_user(user_id)
+        
+        if "error" in user_info:
+            await message.answer(f"❌ Пользователь с ID {user_id} не найден.")
+        else:
+            formatted_info = format_user_info(user_info)
+            await message.answer(formatted_info, parse_mode="Markdown")
+            
+            # Создаем inline клавиатуру для быстрых действий
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="✅ Вкл/Выкл отчеты", 
+                            callback_data=f"toggle_report:{user_id}"
+                        ),
+                        InlineKeyboardButton(
+                            text="👑 Дать/забрать админа", 
+                            callback_data=f"toggle_admin:{user_id}"
+                        )
+                    ]
+                ]
+            )
+            
+            await message.answer(
+                "**Быстрые действия:**",
+                reply_markup=keyboard,
+                parse_mode="Markdown"
+            )
+    
+    except ValueError:
+        await message.answer("❌ Неверный формат ID. Введите число.")
+    
+    # Возвращаем в админ панель
+    await cmd_admin_panel(message, state)
+
+# Включить/выключить отчеты для пользователя
+@dp.message(AdminStates.waiting_admin_command, F.text == "✅ Вкл/выкл отчеты")
+async def admin_toggle_reports(message: types.Message, state: FSMContext):
+    await message.answer(
+        "Введите **ID пользователя** для изменения настроек отчетов:",
+        parse_mode="Markdown",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.update_data(action="toggle_report")
+    await state.set_state(AdminStates.waiting_user_id)
+
+# Дать/забрать админ права
+@dp.message(AdminStates.waiting_admin_command, F.text == "👑 Дать/забрать админа")
+async def admin_toggle_admin(message: types.Message, state: FSMContext):
+    await message.answer(
+        "Введите **ID пользователя** для изменения админ прав:",
+        parse_mode="Markdown",
+        reply_markup=types.ReplyKeyboardRemove()
+    )
+    await state.update_data(action="toggle_admin")
+    await state.set_state(AdminStates.waiting_user_id)
+
+# Обработка действий с пользователем (callback)
+@dp.callback_query(F.data.startswith("toggle_"))
+async def process_toggle_action(callback: types.CallbackQuery):
+    action, user_id_str = callback.data.split(":")
+    user_id = int(user_id_str)
+    
+    # Получаем текущую информацию о пользователе
+    user_info = await api_client.get_user(user_id)
+    
+    if "error" in user_info:
+        await callback.answer("❌ Пользователь не найден")
+        return
+    
+    status_info = user_info.get("status_info", {})
+    current_name = f"{user_info.get('first_name', '')} {user_info.get('last_name', '')}".strip()
+    
+    if action == "toggle_report":
+        current_status = status_info.get("enable_report", False)
+        new_status = not current_status
+        status_text = "включены" if new_status else "выключены"
+        
+        # Используем API для изменения статуса
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.put(
+                    f"{api_client.base_url}/admin/users/{user_id}/toggle-report"
+                ) as response:
+                    if response.status == 200:
+                        await callback.answer(
+                            f"✅ Отчеты для {current_name} {status_text}"
+                        )
+                        
+                        # Обновляем сообщение
+                        updated_info = await api_client.get_user(user_id)
+                        formatted_info = format_user_info(updated_info)
+                        
+                        keyboard = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text="✅ Вкл/Выкл отчеты", 
+                                        callback_data=f"toggle_report:{user_id}"
+                                    ),
+                                    InlineKeyboardButton(
+                                        text="👑 Дать/забрать админа", 
+                                        callback_data=f"toggle_admin:{user_id}"
+                                    )
+                                ]
+                            ]
+                        )
+                        
+                        await callback.message.edit_text(
+                            formatted_info,
+                            parse_mode="Markdown"
+                        )
+                        await callback.message.edit_reply_markup(
+                            reply_markup=keyboard
+                        )
+                    else:
+                        await callback.answer("❌ Ошибка при изменении настроек")
+        except Exception as e:
+            await callback.answer(f"❌ Ошибка: {str(e)}")
+    
+    elif action == "toggle_admin":
+        current_status = status_info.get("enable_admin", False)
+        new_status = not current_status
+        status_text = "даны" if new_status else "забраны"
+        
+        # Используем API для изменения статуса
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.put(
+                    f"{api_client.base_url}/admin/users/{user_id}/toggle-admin"
+                ) as response:
+                    if response.status == 200:
+                        await callback.answer(
+                            f"✅ Админ права для {current_name} {status_text}"
+                        )
+                        
+                        # Обновляем сообщение
+                        updated_info = await api_client.get_user(user_id)
+                        formatted_info = format_user_info(updated_info)
+                        
+                        keyboard = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text="✅ Вкл/Выкл отчеты", 
+                                        callback_data=f"toggle_report:{user_id}"
+                                    ),
+                                    InlineKeyboardButton(
+                                        text="👑 Дать/забрать админа", 
+                                        callback_data=f"toggle_admin:{user_id}"
+                                    )
+                                ]
+                            ]
+                        )
+                        
+                        await callback.message.edit_text(
+                            formatted_info,
+                            parse_mode="Markdown"
+                        )
+                        await callback.message.edit_reply_markup(
+                            reply_markup=keyboard
+                        )
+                    else:
+                        await callback.answer("❌ Ошибка при изменении прав")
+        except Exception as e:
+            await callback.answer(f"❌ Ошибка: {str(e)}")
+
+# Статистика
+@dp.message(AdminStates.waiting_admin_command, F.text == "📋 Статистика")
+async def admin_statistics(message: types.Message):
+    # Получаем общий отчет
+    report_data = await api_client.get_report()
+    
+    if "error" in report_data:
+        await message.answer(f"❌ Ошибка при получении статистики: {report_data['error']}")
+        return
+    
+    summary = report_data.get("status_summary", {})
+    total = report_data.get("total", 0)
+    
+    # Получаем список секторов
+    sectors_data = await api_client.get_sectors()
+    sectors_count = len(sectors_data.get("sectors", [])) if not "error" in sectors_data else 0
+    
+    message_text = "📊 **СТАТИСТИКА СИСТЕМЫ**\n\n"
+    message_text += f"**Общая информация:**\n"
+    message_text += f"👥 Всего сотрудников: {total}\n"
+    message_text += f"🏢 Количество секторов: {sectors_count}\n\n"
+    
+    message_text += "**Распределение по статусам:**\n"
+    status_emojis = {
+        "здоров": "✅",
+        "болен": "🤒", 
+        "отпуск": "🏖",
+        "удаленка": "🏠",
+        "отгул": "📋",
+        "учеба": "📚",
+        "не указан": "❓"
+    }
+    
+    for status, count in summary.items():
+        if status:  # Пропускаем пустые статусы
+            emoji = status_emojis.get(status, "📝")
+            percentage = (count / total * 100) if total > 0 else 0
+            message_text += f"{emoji} {status.capitalize()}: {count} ({percentage:.1f}%)\n"
+    
+    await message.answer(message_text, parse_mode="Markdown")
+
+# Возврат в главное меню
+@dp.message(F.text == "⬅️ Назад в меню")
+async def back_to_main_menu(message: types.Message, state: FSMContext):
+    await state.clear()
+    
+    # Проверяем права пользователя
+    is_admin = await check_admin(message.from_user.id)
+    
+    # Основная клавиатура
+    keyboard_buttons = [
+        [types.KeyboardButton(text="📊 Отчет по моему сектору")],
+        [types.KeyboardButton(text="📈 Отчет по всем секторам")],
+        [types.KeyboardButton(text="🏢 Список секторов")],
+        [types.KeyboardButton(text="💊 Отметить статус здоровья")],
+        [types.KeyboardButton(text="👤 Моя информация")]
+    ]
+    
+    # Добавляем админ-панель если пользователь админ
+    if is_admin:
+        keyboard_buttons.append([types.KeyboardButton(text="👑 Админ панель")])
+    
+    keyboard_buttons.append([types.KeyboardButton(text="❌ Отменить действие")])
+    
+    keyboard = types.ReplyKeyboardMarkup(
+        keyboard=keyboard_buttons,
+        resize_keyboard=True
+    )
+    
+    await message.answer(
+        "🏠 **Главное меню**\n\n"
+        "Выберите действие:",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    await state.set_state(ActionStates.waiting_for_action)
+
+# Возврат в админ панель (для обработки при возврате из подсостояний)
+@dp.message(AdminStates.waiting_admin_command, F.text == "⬅️ Назад в меню")
+async def back_to_admin_menu(message: types.Message, state: FSMContext):
+    await cmd_admin_panel(message, state)
+
 # Команда отмены
 @dp.message(F.text == "❌ Отменить действие")
 async def cmd_cancel(message: types.Message, state: FSMContext):
     await state.clear()
     
+    # Проверяем права пользователя
+    is_admin = await check_admin(message.from_user.id)
+    
+    # Основная клавиатура
+    keyboard_buttons = [
+        [types.KeyboardButton(text="📊 Отчет по моему сектору")],
+        [types.KeyboardButton(text="📈 Отчет по всем секторам")],
+        [types.KeyboardButton(text="🏢 Список секторов")],
+        [types.KeyboardButton(text="💊 Отметить статус здоровья")],
+        [types.KeyboardButton(text="👤 Моя информация")]
+    ]
+    
+    # Добавляем админ-панель если пользователь админ
+    if is_admin:
+        keyboard_buttons.append([types.KeyboardButton(text="👑 Админ панель")])
+    
+    keyboard_buttons.append([types.KeyboardButton(text="❌ Отменить действие")])
+    
     keyboard = types.ReplyKeyboardMarkup(
-        keyboard=[
-            [types.KeyboardButton(text="📊 Отчет по моему сектору")],
-            [types.KeyboardButton(text="📈 Отчет по всем секторам")],
-            [types.KeyboardButton(text="💊 Отметить статус здоровья")],
-            [types.KeyboardButton(text="👤 Моя информация")],
-            [types.KeyboardButton(text="❌ Отменить действие")]
-        ],
+        keyboard=keyboard_buttons,
         resize_keyboard=True
     )
     
@@ -535,22 +924,21 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 @dp.message(Command("help"))
 async def cmd_help(message: types.Message):
     help_text = (
-        "🤖 **Помощь по использованию бота**\n\n"
+        "🤖 **ПОМОЩЬ ПО ИСПОЛЬЗОВАНИЮ БОТА**\n\n"
         "**Основные команды:**\n"
         "• /start - Начать работу с ботом\n"
         "• /help - Показать эту справку\n\n"
         "**Основные функции:**\n"
-        "• 📊 Получить отчет - Просмотр отчета по сотрудникам\n"
-        "• 💊 Отметить статус здоровья - Указать свой текущий статус\n"
+        "• 📊 Отчет по сектору - Просмотр отчета по вашему сектору\n"
+        "• 📈 Отчет по всем - Общий отчет по всем секторам\n"
+        "• 💊 Отметить статус - Указать свой текущий статус\n"
         "• 👤 Моя информация - Просмотр вашей информации\n"
-        "• ❌ Отменить действие - Отменить текущую операцию\n\n"
-        "**Статусы здоровья:**\n"
-        "• ✅ здоров - Вы здоровы и на работе\n"
-        "• 🤒 болен - Вы заболели (требуется указать заболевание)\n"
-        "• 🏖 отпуск - Вы в отпуске\n"
-        "• 🏠 удаленка - Работаете удаленно\n"
-        "• 📋 отгул - Взяли отгул\n"
-        "• 📚 учеба - На учебе\n\n"
+        "• 🏢 Список секторов - Просмотр всех секторов\n\n"
+        "**Административные функции:**\n"
+        "• 👑 Админ панель - Панель управления системой (только для админов)\n"
+        "• ✅ Вкл/выкл отчеты - Управление отчетами пользователей\n"
+        "• 👑 Дать/забрать админа - Управление правами администратора\n"
+        "• 📋 Статистика - Общая статистика системы\n\n"
         "**Проблемы?**\n"
         "Если бот не работает, проверьте:\n"
         "1. Интернет-соединение\n"
@@ -559,65 +947,7 @@ async def cmd_help(message: types.Message):
     )
     
     await message.answer(help_text, parse_mode="Markdown")
-@dp.message(ActionStates.waiting_for_action, F.text == "👑 Админ панель")
-async def cmd_admin_panel(message: types.Message, state: FSMContext):
-    # Проверяем, является ли пользователь админом
-    user_info = await api_client.get_user(message.from_user.id)
-    
-    if "error" in user_info:
-        await message.answer("❌ Не удалось проверить права доступа.")
-        return
-    
-    is_admin = user_info.get("status_info", {}).get("enable_admin", False)
-    
-    if not is_admin:
-        await message.answer("❌ У вас нет прав администратора.")
-        return
-    
-    keyboard = types.ReplyKeyboardMarkup(
-        keyboard=[
-            [types.KeyboardButton(text="📊 Отчет по сектору"), types.KeyboardButton(text="📈 Отчет по всем")],
-            [types.KeyboardButton(text="🔍 Поиск по сотруднику")],
-            [types.KeyboardButton(text="⚙️ Управление секторами")],
-            [types.KeyboardButton(text="⬅️ Назад в меню")]
-        ],
-        resize_keyboard=True
-    )
-    
-    await message.answer(
-        "👑 **Административная панель**\n\n"
-        "Выберите действие:",
-        reply_markup=keyboard,
-        parse_mode="Markdown"
-    )
 
-# Обработчик отчета по конкретному сектору (для админов)
-@dp.message(F.text == "📊 Отчет по сектору")
-async def cmd_report_by_sector(message: types.Message, state: FSMContext):
-    await message.answer(
-        "Введите ID сектора для отчета:",
-        reply_markup=types.ReplyKeyboardRemove()
-    )
-    await state.set_state("waiting_for_sector_id")
-
-@dp.message(F.text.regexp(r'^\d+$'), F.state == "waiting_for_sector_id")
-async def process_sector_id(message: types.Message, state: FSMContext):
-    sector_id = int(message.text)
-    await message.answer(f"⏳ Загружаю отчет для сектора {sector_id}...")
-    
-    report_data = await api_client.get_report(sector_id=sector_id)
-    formatted_report = format_report(report_data)
-    formatted_report = f"🏢 **ОТЧЕТ ПО СЕКТОРУ {sector_id}**\n\n" + formatted_report[formatted_report.find("\n\n")+2:]
-    
-    if len(formatted_report) > 4000:
-        parts = [formatted_report[i:i+4000] for i in range(0, len(formatted_report), 4000)]
-        for part in parts:
-            await message.answer(part, parse_mode="Markdown")
-    else:
-        await message.answer(formatted_report, parse_mode="Markdown")
-    
-    await state.clear()
-    await state.set_state(ActionStates.waiting_for_action)
 @dp.message(ActionStates.waiting_for_action, F.text == "🏢 Список секторов")
 async def cmd_list_sectors(message: types.Message):
     await message.answer("⏳ Загружаю список секторов...")
@@ -639,14 +969,11 @@ async def cmd_list_sectors(message: types.Message):
     for sector in sectors:
         sector_id = sector.get("sector_id")
         name = sector.get("name", f"Сектор {sector_id}")
-        #description = sector.get("description", "")
         
-        message_text += f"**{sector_id}. {name}**\n"
-        #if description:
-        #    message_text += f"   📝 {description}\n"
-        message_text += "\n"
+        message_text += f"**{sector_id}. {name}**\n\n"
     
     await message.answer(message_text, parse_mode="Markdown")
+
 # Главная функция
 async def main():
     print("🤖 Запуск Telegram бота с API...")
