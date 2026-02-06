@@ -1,3 +1,4 @@
+# bot/bot_main.py
 #!/usr/bin/env python3
 """
 Главный файл для запуска Telegram бота
@@ -7,41 +8,44 @@ import logging
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram import types
+from bot.scheduler import ReportScheduler
+
 
 from bot.config import TOKEN
-from bot.states import ActionStates, HealthStates, AdminStates, RegistrationStates
 
-# Импорт обработчиков из start.py
+# Импорт обработчиков
 from bot.handlers.start import (
-    cmd_start, cmd_help, cmd_cancel, back_to_main_menu,
+    cmd_start, cmd_help,  cmd_cancel, back_to_main_menu,
     start_registration, process_first_name, process_last_name
 )
 
-# Импорт обработчиков из health.py
 from bot.handlers.health import (
     cmd_health, process_healthy_status, 
     process_sick_status, process_disease
 )
 
-# Импорт обработчиков из report.py
 from bot.handlers.report import (
     cmd_report_api, cmd_report_all_sectors,
     cmd_list_sectors, cmd_my_info
 )
 
-# Импорт обработчиков из admin.py
 from bot.handlers.admin import (
     cmd_admin_panel, 
-    admin_search_user,
-    admin_select_sector,
-    admin_general_report,
-    admin_statistics,
-    process_user_search,
-    process_toggle_action,
-    cmd_user_info,
-    cmd_sector_report,
-    admin_back_to_main_menu  # переименовали для ясности
+    admin_general_report, admin_statistics,
+    process_toggle_action, cmd_user_info,
+    show_all_users, admin_back_to_main_menu,
+    get_pagination_keyboard
 )
+
+from bot.handlers.user_selection_handlers import (
+    handle_user_pagination,
+    handle_user_selection,
+    handle_cancel_selection
+)
+
+# Импорт состояний из центрального файла
+from bot.imports import ActionStates, HealthStates, AdminStates, RegistrationStates, ScheduleStates
 
 # Настройка логирования
 logging.basicConfig(
@@ -56,12 +60,23 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
+    
+     # Создаем планировщик
+    scheduler = ReportScheduler(bot)
+    
+    # Планируем задачи
+    scheduler.schedule_daily_report("07:30")  # Ежедневно в 7:30
+    # scheduler.schedule_test_report(60)  # Тест каждые 60 секунд
+    
+    # Запускаем планировщик
+    scheduler.start()
+    
     # Регистрация обработчиков
     
     # Команды
     dp.message.register(cmd_start, Command("start"))
     dp.message.register(cmd_help, Command("help"))
-    
+        
     # Основные действия
     dp.message.register(cmd_cancel, F.text == "❌ Отменить действие")
     dp.message.register(back_to_main_menu, F.text == "⬅️ Назад в меню")
@@ -95,21 +110,28 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     dp.message.register(cmd_admin_panel, ActionStates.waiting_for_action, F.text == "👑 Админ панель")
     
     # Админ команды
-    dp.message.register(admin_search_user, AdminStates.waiting_admin_command, F.text == "🔍 Найти сотрудника")
-    dp.message.register(admin_select_sector, AdminStates.waiting_admin_command, F.text == "📊 Отчет по сектору")
-    dp.message.register(admin_general_report, AdminStates.waiting_admin_command, F.text == "📈 Общий отчет")
+    dp.message.register(show_all_users, AdminStates.waiting_admin_command, F.text == "🔍 Найти сотрудника")
+    dp.message.register(admin_general_report, AdminStates.waiting_admin_command, F.text == "👥 Список сотрудников")
     dp.message.register(admin_statistics, AdminStates.waiting_admin_command, F.text == "📋 Статистика")
     dp.message.register(admin_back_to_main_menu, AdminStates.waiting_admin_command, F.text == "⬅️ Главное меню")
     
-    # Админ состояния
-    dp.message.register(process_user_search, AdminStates.waiting_user_query)
     
-    # Команды админа
-    dp.message.register(cmd_user_info, Command("user_info"))
-    dp.message.register(cmd_sector_report, Command("sector_report"))
     
     # Callback обработчики
     dp.callback_query.register(process_toggle_action, F.data.startswith("toggle_"))
+    
+    
+    dp.callback_query.register(handle_user_pagination, F.data.startswith("user_page:"))
+    dp.callback_query.register(handle_user_selection, F.data.startswith("select_user:"))
+    dp.callback_query.register(handle_cancel_selection, F.data == "cancel_selection")
+
+    #@dp.callback_query()
+    #async def temp_handler(callback: types.CallbackQuery):
+    #    print(f"🔍 DEBUG: callback.data = '{callback.data}'")
+    #    print(f"🔍 DEBUG: type = {type(callback.data)}")
+#
+    #    # Ответьте что угодно, чтобы пользователь видел реакцию
+    #    await callback.answer(f"📨: {callback.data}")
     
     return bot, dp
 

@@ -66,7 +66,7 @@ def format_report(report_data: dict) -> str:
     
     return message
 
-def format_user_info(user_data: dict) -> str:
+def format_user_info(user_data: dict,report_data:dict) -> str:
     """Форматировать информацию о пользователе"""
     if "error" in user_data:
         return f"❌ Ошибка: {user_data['error']}"
@@ -113,10 +113,16 @@ def format_user_info(user_data: dict) -> str:
         enable_admin = status_info.get("enable_admin", False)
         sector_id = status_info.get("sector_id", "Не указан")
         
+        sector_info = report_data.get("sector_info", {})
+    
+        # Определяем заголовок
+        sector_name = sector_info.get("name") if sector_info else None
+        #sector_id = sector_info.get("sector_id") if sector_info else None
+        
         message += f"\n**Настройки доступа:**\n"
         message += f"📊 Отчеты: {'✅ Включены' if enable_report else '❌ Выключены'}\n"
         message += f"👑 Админ: {'✅ Да' if enable_admin else '❌ Нет'}\n"
-        message += f"🏢 Сектор: {sector_id}\n"
+        message += f"🏢 Сектор: {sector_name}\n"
     
     # Даты
     created_at = user_data.get("created_at", "")

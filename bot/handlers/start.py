@@ -1,11 +1,14 @@
+# bot/handlers/start.py
 from aiogram import types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-
-from app.api_client import api_client
-from bot.states import ActionStates, RegistrationStates
-from bot.keyboards.main import get_main_keyboard
 import logging
+
+# Импорты из центрального файла
+from bot.imports import (
+    is_user_admin, get_main_keyboard, api_client,
+    ActionStates, RegistrationStates
+)
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +86,7 @@ async def cmd_help(message: types.Message):
     )
     
     await message.answer(help_text, parse_mode="Markdown")
+
 
 async def cmd_cancel(message: types.Message, state: FSMContext):
     """Обработчик отмены действия"""

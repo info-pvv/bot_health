@@ -1,9 +1,12 @@
+# bot/handlers/report.py
 from aiogram import types, F
 from aiogram.fsm.context import FSMContext
 
-from app.api_client import api_client
-from bot.states import ActionStates
-from bot.utils.formatters import format_report, format_user_info
+# Импорты из центрального файла
+from bot.imports import (
+    api_client, format_report, format_user_info,
+    ActionStates
+)
 
 async def cmd_report_api(message: types.Message):
     """Получить отчет по своему сектору"""
@@ -66,6 +69,7 @@ async def cmd_my_info(message: types.Message):
     """Показать информацию о себе"""
     # Получаем информацию о пользователе через API
     user_info = await api_client.get_user(message.from_user.id)
+    report_data = await api_client.get_report(user_id=message.from_user.id)
     
     if "error" in user_info:
         await message.answer(
@@ -77,5 +81,5 @@ async def cmd_my_info(message: types.Message):
             parse_mode="Markdown"
         )
     else:
-        formatted_info = format_user_info(user_info)
+        formatted_info = format_user_info(user_info, report_data)
         await message.answer(formatted_info, parse_mode="Markdown")

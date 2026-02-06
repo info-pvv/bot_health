@@ -235,6 +235,22 @@ class APIClient:
                     return {"error": f"API error {response.status}: {error_text}"}
         except Exception as e:
             return {"error": f"Connection error: {str(e)}"}
+        
+    async def get_admin_users_list(self, skip: int = 0, limit: int = 100) -> Dict[str, Any]:
+        """Получить список пользователей для админ-панели"""
+        session = await self.get_session()
+        url = "/users/admin/list"
+        params = {"skip": skip, "limit": limit}
+        
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
 
 # Глобальный экземпляр клиента
 api_client = APIClient()

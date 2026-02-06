@@ -1,10 +1,14 @@
+# bot/handlers/health.py
 from aiogram import types, F
 from aiogram.fsm.context import FSMContext
-
-from app.api_client import api_client
-from bot.states import HealthStates, ActionStates
-from bot.keyboards.main import get_main_keyboard, get_health_keyboard, get_disease_keyboard
 import logging
+
+# Импорты из центрального файла
+from bot.imports import (
+    api_client, get_main_keyboard, 
+    get_health_keyboard, get_disease_keyboard,
+    ActionStates, HealthStates
+)
 
 logger = logging.getLogger(__name__)
 
