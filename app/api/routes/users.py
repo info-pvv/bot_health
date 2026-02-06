@@ -1,11 +1,11 @@
-# app/api/routes/users.py
-from fastapi import APIRouter, Depends, HTTPException
+# app/api/routes/users.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List  # Добавьте импорт
+from typing import List, Optional
 from app.models.database import get_db
 from app.services.user_service import UserService
 from app.schemas.user import UserCreate, UserResponse, UserUpdate, UserStatusUpdate
-from app.schemas.health import HealthUpdate, DiseaseUpdate 
+from app.schemas.health import HealthUpdate, DiseaseUpdate
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -116,7 +116,7 @@ async def update_user_health(
     }
     
     return response
-# Альтернативно можно создать отдельные эндпоинты:
+
 @router.put("/{user_id}/health/status")
 async def update_health_status_only(
     user_id: int,
@@ -198,6 +198,8 @@ async def register_user(
             
             try:
                 # Создаем связанные записи
+                from app.models.user import FIO, UserStatus, Health, Disease, User
+                
                 db_fio = FIO(
                     user_id=user_id,
                     first_name=first_name,
@@ -238,6 +240,7 @@ async def register_user(
                 await db.commit()
                 
                 # Получаем пользователя
+                from sqlalchemy import select
                 result = await db.execute(
                     select(User).where(User.user_id == user_id)
                 )
@@ -255,3 +258,110 @@ async def register_user(
                 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Registration failed: {str(e)}")
+
+# ДОБАВЛЕННЫЙ ЭНДПОИНТ ДЛЯ ПОИСКА
+@router.get("/search/")
+async def search_users(
+    q: str = Query(..., min_length=2, description="Поисковый запрос"),
+    skip: int = 0,
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db)
+):
+    """Поиск пользователей по имени, фамилии или username"""
+    from sqlalchemy import or_, select
+    from app.models.user import User, FIO
+    
+    # Создаем запрос с JOIN
+    query = (
+        select(User)
+        .join(FIO, FIO.user_id == User.user_id)
+        .where(
+            or_(
+                User.first_name.ilike(f"%{q}%"),
+                User.last_name.ilike(f"%{q}%"),
+                User.username.ilike(f"%{q}%"),
+                FIO.first_name.ilike(f"%{q}%"),
+                FIO.last_name.ilike(f"%{q}%")
+            )
+        )
+        .offset(skip)
+        .limit(limit)
+    )
+    
+    result = await db.execute(query)
+    users = result.scalars().all()
+    
+    # Форматируем ответ
+    users_list = []
+    for user in users:
+        users_list.append({
+            "id": user.id,
+            "user_id": user.user_id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "username": user.username,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        })
+    
+    return {"users": users_list, "total": len(users_list), "query": q}
+
+
+@router.get("/admin/list")
+async def get_users_for_admin(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
+    """Получить список пользователей для админ-панели с расширенной информацией"""
+    from sqlalchemy import select
+    from app.models.user import User, UserStatus, FIO, Health, Disease
+    
+    # Запрос с JOIN всех связанных таблиц
+    query = (
+        select(
+            User.user_id,
+            User.first_name,
+            User.last_name,
+            User.username,
+            User.created_at,
+            UserStatus.enable_report,
+            UserStatus.enable_admin,
+            UserStatus.sector_id,
+            Health.status,
+            Disease.disease
+        )
+        .select_from(User)
+        .outerjoin(UserStatus, User.user_id == UserStatus.user_id)
+        .outerjoin(FIO, User.user_id == FIO.user_id)
+        .outerjoin(Health, User.user_id == Health.user_id)
+        .outerjoin(Disease, User.user_id == Disease.user_id)
+        .order_by(User.user_id)
+        .offset(skip)
+        .limit(limit)
+    )
+    
+    result = await db.execute(query)
+    rows = result.all()
+    
+    users_list = []
+    for row in rows:
+        users_list.append({
+            "user_id": row[0],
+            "first_name": row[1] or "Не указано",
+            "last_name": row[2] or "Не указано",
+            "username": row[3] or "Не указано",
+            "created_at": row[4],
+            "enable_report": row[5] if row[5] is not None else False,
+            "enable_admin": row[6] if row[6] is not None else False,
+            "sector_id": row[7],
+            "status": row[8] or "не указан",
+            "disease": row[9] or ""
+        })
+    
+    return {
+        "users": users_list,
+        "total": len(users_list),
+        "skip": skip,
+        "limit": limit
+    }
