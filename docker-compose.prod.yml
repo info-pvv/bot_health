@@ -59,6 +59,8 @@ services:
     image: dpage/pgadmin4
     container_name: health_tracker_pgadmin_prod
     restart: unless-stopped
+    env_file:
+      - .env.production
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
