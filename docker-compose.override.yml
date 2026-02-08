@@ -1,0 +1,27 @@
+# docker-compose.override.yml - Windows-specific overrides
+services:
+  api-dev:
+    # На Windows может потребоваться другой healthcheck
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Настройки для лучшей работы с Windows файловой системой
+    volumes:
+      - .:/app:rw
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 100000000
+          
+  bot-dev:
+    # Дополнительные настройки для Windows
+    volumes:
+      - .:/app:rw
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 50000000

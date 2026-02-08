@@ -1,0 +1,89 @@
+services:
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: health_tracker_postgres_dev
+    restart: unless-stopped
+    env_file:
+      - .env.windows
+    #environment:
+    #  POSTGRES_USER: ${POSTGRES_USER}
+    #  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    #  POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  api-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: health_tracker_api_dev
+    restart: unless-stopped
+    env_file:
+      - .env.windows
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+    environment:
+    #  POSTGRES_HOST: ${POSTGRES_HOST}
+      API_BASE_URL: http://localhost:8000
+      PYTHONPATH: /app
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    command: >
+      sh -c "echo 'Waiting for database...' &&
+             sleep 10 &&
+             echo 'Running migrations...' &&
+             python migrations/manage.py up &&
+             echo 'Starting API...' &&
+             uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+
+  bot-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.bot
+    container_name: health_tracker_bot_dev
+    restart: on-failure:5
+    env_file:
+      - .env.windows
+    depends_on:
+      api-dev:
+        condition: service_started
+    environment:
+      API_BASE_URL: http://api-dev:8000
+      PYTHONPATH: /app
+      REPORT_ENABLED: "false"
+    volumes:
+      - .:/app
+    command: >
+      sh -c "echo 'Waiting for API...' &&
+             sleep 15 &&
+             echo 'Starting bot...' &&
+             python bot/bot_main.py"
+
+  pgadmin-dev:
+    image: dpage/pgadmin4
+    container_name: health_tracker_pgadmin_dev
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com  # Измените email
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data_dev:/var/lib/pgadmin
+    depends_on:
+      - postgres-dev
+
+volumes:
+  postgres_data_dev:
+  pgadmin_data_dev:

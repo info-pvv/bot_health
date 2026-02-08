@@ -4,6 +4,7 @@ import sqlite3
 import asyncio
 import asyncpg
 from datetime import datetime
+from app.core.config import settings
 
 async def migrate_data_compatible():
     """Миграция данных совместимая с вашими миграциями"""
@@ -14,12 +15,14 @@ async def migrate_data_compatible():
         print("❌ Файл health.db не найден")
         return False
     
+    print(f"📊 База данных: {settings.POSTGRES_DB}")
+    print(f"🔗 Подключение: {settings.POSTGRES_USER}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}")
     pg_config = {
-        'user': 'postgres',
-        'password': 'b4H78Q9z)',
-        'host': 'localhost',
-        'port': 5432,
-        'database': 'health_tracker'
+        'user': settings.POSTGRES_USER,
+        'password': settings.POSTGRES_PASSWORD,
+        'host': settings.POSTGRES_HOST,
+        'port': settings.POSTGRES_PORT,
+        'database': settings.POSTGRES_DB
     }
     
     try:
@@ -286,11 +289,11 @@ async def check_tables_before_migration():
     print("🔍 Проверка перед миграцией...")
     
     pg_config = {
-        'user': 'postgres',
-        'password': 'b4H78Q9z)',
-        'host': 'localhost',
-        'port': 5432,
-        'database': 'health_tracker'
+        'user': settings.POSTGRES_USER,
+        'password': settings.POSTGRES_PASSWORD,
+        'host': settings.POSTGRES_HOST,
+        'port': settings.POSTGRES_PORT,
+        'database': settings.POSTGRES_DB
     }
     
     try:

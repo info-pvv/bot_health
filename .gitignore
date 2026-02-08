@@ -53,6 +53,8 @@ logs/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.windows
+.env.production
 
 # Config files (except example)
 config.py

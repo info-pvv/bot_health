@@ -276,6 +276,302 @@ python bot_runner.py
 
 **Примечание:** Убедитесь что PostgreSQL запущен и доступен по указанным в `.env` параметрам.
 
+# 🐳 Health Tracker - Windows Development & Production Deployment
+
+## 🚀 Quick Start for Windows
+
+### Prerequisites
+1. **Docker Desktop for Windows** - [Download](https://www.docker.com/products/docker-desktop/)
+2. **WSL 2** (Recommended) - Enable in Docker Desktop settings
+3. **Git** - [Download](https://git-scm.com/download/win)
+
+### Initial Setup
+```powershell
+# Run as Administrator in PowerShell
+.\init-windows.ps1
+Development Environment
+Edit .env.windows and add your Telegram Bot Token
+
+Start development services:
+
+powershell
+.\deploy.ps1 -Build
+Management Commands
+powershell
+# Start all services
+.\manage.ps1 start
+
+# Stop all services
+.\manage.ps1 stop
+
+# View logs
+.\manage.ps1 logs
+.\manage.ps1 logs api-dev
+.\manage.ps1 logs bot-dev
+
+# Run migrations
+.\manage.ps1 migrate
+
+# Backup database
+.\manage.ps1 backup
+
+# Open shell in container
+.\manage.ps1 shell api-dev
+.\manage.ps1 shell postgres-dev
+
+# Clean Docker resources
+.\manage.ps1 clean
+Access Services
+API: http://localhost:8000
+
+API Docs: http://localhost:8000/docs
+
+PgAdmin: http://localhost:5050
+
+Login: dev@example.com
+
+Password: dev_password
+
+🏭 Production Deployment to Linux
+Prepare Production Server
+powershell
+# Setup server for first time
+.\deploy-linux.ps1 -Server your-server.com -Username ubuntu -Setup
+
+# Deploy application
+.\deploy-linux.ps1 -Server your-server.com -Username ubuntu
+Manual Server Setup (Alternative)
+bash
+# On your Linux server
+sudo apt update && sudo apt upgrade -y
+sudo apt install docker.io docker-compose git -y
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+
+mkdir -p /opt/health-tracker
+cd /opt/health-tracker
+Production Commands (on Linux server)
+bash
+# Start production
+cd /opt/health-tracker
+docker-compose -f docker-compose.prod.yml up -d
+
+# View logs
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Stop production
+docker-compose -f docker-compose.prod.yml down
+
+# Backup database
+docker-compose -f docker-compose.prod.yml exec postgres \
+  pg_dump -U $POSTGRES_USER $POSTGRES_DB > backup_$(date +%Y%m%d_%H%M%S).sql
+🛠️ Development Tips for Windows
+1. Performance Optimization
+Store project in WSL 2 filesystem (e.g., /home/username/projects/)
+
+In Docker Desktop: Settings → Resources → Increase memory to 8GB
+
+Use .dockerignore to exclude unnecessary files
+
+2. Hot Reload
+API: Automatic reload when code changes
+
+Bot: Requires restart on changes: .\manage.ps1 restart bot-dev
+
+3. Database Management
+powershell
+# Access PostgreSQL
+.\manage.ps1 shell postgres-dev
+# Inside container:
+psql -U dev_user -d health_tracker_dev
+
+# Reset database
+.\manage.ps1 stop
+docker volume rm health_tracker_postgres_data_dev
+.\deploy.ps1 -Build
+4. Debugging
+powershell
+# View all logs
+.\manage.ps1 logs
+
+# Check container health
+docker ps
+docker-compose -f docker-compose.dev.yml ps
+
+# Inspect container
+docker exec -it health_tracker_api_dev sh
+🔧 Troubleshooting
+Docker Desktop Issues
+"Docker Desktop not starting"
+
+Check WSL 2 is installed: wsl --list --verbose
+
+Restart Docker Desktop as Administrator
+
+"Volume mounting not working"
+
+In Docker Desktop: Settings → Resources → File Sharing
+
+Add project folder to shared folders
+
+"Out of memory"
+
+Increase Docker Desktop memory limit
+
+Run: .\manage.ps1 clean
+
+Network Issues
+"Can't connect to localhost:8000"
+
+Check if API is running: .\manage.ps1 status
+
+Check firewall: Allow port 8000
+
+"Database connection refused"
+
+Wait for PostgreSQL to start (takes ~30 seconds)
+
+Check: .\manage.ps1 logs postgres-dev
+
+Bot Issues
+"Bot not responding"
+
+Check TELEGRAM_TOKEN in .env.windows
+
+Restart bot: .\manage.ps1 restart bot-dev
+
+Check logs: .\manage.ps1 logs bot-dev
+
+📦 Production Checklist
+Before Deployment
+.env.production filled with real values
+
+SECRET_KEY is strong and unique
+
+Database passwords are secure
+
+TELEGRAM_TOKEN is production bot token
+
+Backup strategy is in place
+
+After Deployment
+API responds at http://server:8000/
+
+Bot responds to /start
+
+Database migrations applied
+
+Logs are being written
+
+Backups are working
+
+🔐 Security Notes
+For Development
+Use dummy/test tokens
+
+Never commit .env.windows to git
+
+Use development database credentials
+
+For Production
+Use strong, unique passwords
+
+Enable firewall on server
+
+Regular security updates
+
+Monitor logs for suspicious activity
+
+Regular backups
+
+📞 Support
+Common Issues
+WSL 2 not working: Run PowerShell as Admin: wsl --install
+
+Docker Desktop error: Restart Docker Desktop service
+
+Volume permissions: Run Docker Desktop as Administrator
+
+Getting Help
+Check logs: .\manage.ps1 logs
+
+Check status: .\manage.ps1 status
+
+Search existing issues
+
+Create new issue with logs
+
+⭐ Enjoy developing on Windows! ⭐
+
+text
+
+## 10. Конфигурация для CI/CD (GitHub Actions)
+
+Создайте файл `.github/workflows/windows-ci.yml`:
+
+```yaml
+# .github/workflows/windows-ci.yml
+name: Windows CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests
+      run: |
+        python -m pytest tests/ -v
+    
+    - name: Check code style
+      run: |
+        pip install black flake8
+        black --check app/ bot/
+        flake8 app/ bot/
+
+  build-docker:
+    runs-on: windows-latest
+    needs: test-windows
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build Docker image
+      run: |
+        docker build -t health-tracker:latest .
+    
+    - name: Save Docker image
+      run: |
+        docker save health-tracker:latest -o health-tracker.tar
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: docker-image
+        path: health-tracker.tar
+
 ---
 
 ⭐ **Если проект вам понравился, поставьте звездочку на GitHub!** ⭐
