@@ -1,5 +1,5 @@
 services:
-  postgres-dev:
+  postgres-prod:
     image: postgres:15-alpine
     container_name: health_tracker_postgres_prod
     restart: unless-stopped
@@ -10,7 +10,7 @@ services:
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
 
-  api-dev:
+  api-prod:
     build:
       context: .
       dockerfile: Dockerfile.api  # Используем отдельный Dockerfile
@@ -39,7 +39,7 @@ services:
       - ./migrations:/app/migrations
       - ./main.py:/app/main.py
 
-  bot-dev:
+  bot-prod:
     build:
       context: .
       dockerfile: Dockerfile.bot  # Используем отдельный Dockerfile
@@ -55,7 +55,7 @@ services:
       - ./bot:/app/bot
       - ./app/api_client.py:/app/api_client.py
 
-  pgadmin-dev:
+  pgadmin-prod:
     image: dpage/pgadmin4
     container_name: health_tracker_pgadmin_prod
     restart: unless-stopped
