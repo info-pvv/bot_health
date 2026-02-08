@@ -20,6 +20,7 @@ COPY app/ ./app/
 COPY migrations/ ./migrations/
 COPY main.py .
 COPY app/core/config.py ./app/core/
+COPY health.db .
 
 # Настройки
 ENV PYTHONPATH=/app
