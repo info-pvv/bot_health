@@ -28,10 +28,10 @@ echo "✅ Environment variables loaded"
 
 # Сборка и запуск контейнеров
 echo "🔨 Building Docker images..."
-docker-compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml build
 
 echo "🚀 Starting services..."
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml up -d
 
 echo "⏳ Waiting for services to be ready..."
 sleep 10
@@ -40,11 +40,11 @@ sleep 10
 echo "🔍 Checking service status..."
 
 # Проверка PostgreSQL
-if docker-compose -f docker-compose.prod.yml exec -T postgres pg_isready -U $POSTGRES_USER -d $POSTGRES_DB; then
+if docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U $POSTGRES_USER -d $POSTGRES_DB; then
     echo "✅ PostgreSQL is ready"
 else
     echo "❌ PostgreSQL is not ready"
-    docker-compose -f docker-compose.prod.yml logs postgres
+    docker compose -f docker-compose.prod.yml logs postgres
     exit 1
 fi
 
@@ -53,14 +53,14 @@ if curl -s -f http://localhost:$API_PORT/ > /dev/null; then
     echo "✅ API is running"
 else
     echo "❌ API is not responding"
-    docker-compose -f docker-compose.prod.yml logs api
+    docker compose -f docker-compose.prod.yml logs api
     exit 1
 fi
 
 echo "🎉 Deployment completed successfully!"
 echo ""
 echo "📊 Services Status:"
-docker-compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml ps
 echo ""
 echo "🔗 API URL: http://localhost:${API_PORT}"
 echo "📚 API Docs: http://localhost:${API_PORT}/docs"
