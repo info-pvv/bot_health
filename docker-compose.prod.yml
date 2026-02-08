@@ -50,7 +50,8 @@ services:
     environment:
       API_BASE_URL: http://api-prod:8000
     volumes:
-      - .:/app
+      - ./bot:/app/bot
+      - ./app:/app/app
 
   pgadmin-prod:
     image: dpage/pgadmin4
