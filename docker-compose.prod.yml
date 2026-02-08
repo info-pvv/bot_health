@@ -22,7 +22,7 @@ services:
       - postgres-prod
     environment:
       POSTGRES_HOST: postgres-prod
-      API_BASE_URL: http://localhost:8000
+      API_BASE_URL: http://api-prod:8000
       # Proxy настройки для исходящего трафика через Xray
       HTTP_PROXY: http://host.docker.internal:10801
       HTTPS_PROXY: http://host.docker.internal:10801
@@ -35,9 +35,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./app:/app/app
-      - ./migrations:/app/migrations
-      - ./main.py:/app/main.py
+      - .:/app
 
   bot-prod:
     build:
@@ -52,8 +50,7 @@ services:
     environment:
       API_BASE_URL: http://api-prod:8000
     volumes:
-      - ./bot:/app/bot
-      - ./app/api_client.py:/app/api_client.py
+      - .:/app
 
   pgadmin-prod:
     image: dpage/pgadmin4
