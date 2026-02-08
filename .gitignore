@@ -64,5 +64,6 @@ secrets/
 temp/
 tmp/
 
+docker-compose.override.yml
 # Migrations (можно включить если хотите отслеживать)
 # migrations/versions/
