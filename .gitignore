@@ -30,7 +30,7 @@ env.bak/
 venv.bak/
 
 # Database
-*.db
+#*.db
 *.sqlite3
 
 # IDE
@@ -57,7 +57,7 @@ logs/
 .env.production
 
 # Config files (except example)
-config.py
+#config.py
 secrets/
 
 # Temporary files

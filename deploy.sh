@@ -40,20 +40,20 @@ sleep 10
 echo "🔍 Checking service status..."
 
 # Проверка PostgreSQL
-if docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U $POSTGRES_USER -d $POSTGRES_DB; then
+if docker compose -f docker-compose.prod.yml exec -T postgres_prod pg_isready -U $POSTGRES_USER -d $POSTGRES_DB; then
     echo "✅ PostgreSQL is ready"
 else
     echo "❌ PostgreSQL is not ready"
-    docker compose -f docker-compose.prod.yml logs postgres
+    docker compose -f docker-compose.prod.yml logs postgres_prod
     exit 1
 fi
 
 # Проверка API
-if curl -s -f http://localhost:$API_PORT/ > /dev/null; then
+if curl -s -f http://api-prod:$API_PORT/ > /dev/null; then
     echo "✅ API is running"
 else
     echo "❌ API is not responding"
-    docker compose -f docker-compose.prod.yml logs api
+    docker compose -f docker-compose.prod.yml logs api-prod
     exit 1
 fi
 
