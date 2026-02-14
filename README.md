@@ -1,6 +1,6 @@
 ﻿# 📊 Employee Health Tracking System
 
-Система для отслеживания состояния здоровья сотрудников с интеграцией Telegram бота и REST API.
+Система для отслеживания состояния здоровья сотрудников с интеграцией Telegram бота и REST API, включающая автоматическое планирование дежурств администраторов.
 
 ## 🚀 Возможности
 
@@ -11,18 +11,33 @@
 - **Просмотр отчетов** - отчеты по секторам в реальном времени
 - **Административная панель** - управление пользователями и правами
 - **Поиск сотрудников** - поиск по имени, фамилии или username
+- **👨‍✈️ Управление дежурствами** - новая система планирования дежурных администраторов
+
+### 👨‍✈️ Система дежурных администраторов
+
+- **Пул дежурных** - создание списка администраторов, готовых к дежурству
+- **Автоматическое назначение** - система сама выбирает дежурного на неделю с учетом:
+  - Количества отработанных смен в году
+  - Даты последнего дежурства
+  - Равномерного распределения нагрузки
+- **Ручное управление** - добавление и удаление администраторов из пула
+- **Расписание** - просмотр дежурств на сегодня, неделю или месяц
+- **Статистика** - аналитика по отработанным сменам для каждого администратора
+- **Справедливое распределение** - алгоритм минимизирует дисбаланс нагрузки
 
 ### 🌐 REST API
 
 - **Полноценный CRUD** - для всех сущностей системы
 - **Отчеты** - генерация отчетов по секторам и статусам
 - **Управление правами** - API для администрирования
+- **Управление дежурствами** - полный набор эндпоинтов для системы дежурств
 - **Асинхронные операции** - высокая производительность
 
 ### ⏰ Автоматизация
 
 - **Рассылка отчетов** - автоматическая отправка по расписанию
 - **Ежедневные отчеты** - настраиваемое время рассылки
+- **Автоматическое назначение дежурств** - еженедельное планирование
 - **Тестовые уведомления** - для отладки и тестирования
 
 ## 🏗️ Архитектура
@@ -30,33 +45,54 @@
 ```text
 ├── 📁 app/                    # FastAPI приложение
 │   ├── 📁 api/routes/        # Маршруты API
+│   │   ├── health.py         # Отчеты о здоровье
+│   │   ├── users.py          # Управление пользователями
+│   │   ├── admin.py          # Администрирование
+│   │   └── duty.py           # 👨‍✈️ Управление дежурствами
 │   ├── 📁 models/            # Модели БД (SQLAlchemy)
+│   │   ├── user.py           # Пользователи, статусы, ФИО
+│   │   ├── health.py         # Здоровье, заболевания
+│   │   └── duty.py           # 👨‍✈️ Пул, расписание, статистика
 │   ├── 📁 schemas/           # Pydantic схемы
 │   ├── 📁 services/          # Бизнес-логика
+│   │   ├── user_service.py   # Сервис пользователей
+│   │   ├── health_service.py # Сервис здоровья
+│   │   ├── admin_service.py  # Сервис администрирования
+│   │   └── duty_service.py   # 👨‍✈️ Сервис дежурств
 │   └── 📁 core/              # Конфигурация
 │
-├── 📁 bot/                   # Telegram бот
+├── 📁 bot/                    # Telegram бот
 │   ├── 📁 handlers/          # Обработчики сообщений
-│   ├── 📁 keyboards/         # Клавиатуры бота
-│   ├── 📁 services/          # Сервисы бота
-│   ├── 📁 utils/             # Утилиты
-│   └── 📁 scheduler/         # Планировщик задач
+│   │   ├── start.py          # Старт, регистрация, помощь
+│   │   ├── health.py         # Отметка статуса здоровья
+│   │   ├── report.py         # Отчеты
+│   │   ├── admin.py          # Админ-панель
+│   │   └── duty.py           # 👨‍✈️ Управление дежурствами
+│   ├── 📁 keyboards/          # Клавиатуры бота
+│   │   ├── main.py           # Основные клавиатуры
+│   │   ├── admin.py          # Админские клавиатуры
+│   │   └── duty.py           # 👨‍✈️ Клавиатуры дежурств
+│   ├── 📁 services/           # Сервисы бота
+│   ├── 📁 utils/              # Утилиты
+│   └── 📁 scheduler/          # Планировщик задач
 │
-├── 📁 migrations/            # Миграции БД
-├── 📄 requirements.txt       # Зависимости
-├── 📄 main.py               # Точка входа API
-├── 📄 bot_runner.py         # Точка входа бота
-└── 📄 .env                  # Конфигурация
+├── 📁 migrations/             # Миграции БД
+├── 📄 requirements.txt        # Зависимости
+├── 📄 main.py                 # Точка входа API
+├── 📄 bot_runner.py           # Точка входа бота
+└── 📄 .env                    # Конфигурация
 ```
 
 ## 🛠️ Технологии
 
-- **Backend**: FastAPI, SQLAlchemy, Pydantic
-- **Database**: PostgreSQL с asyncpg
+- **Backend**: FastAPI, SQLAlchemy, Pydantic, Alembic
+- **Database**: PostgreSQL 15+ с asyncpg
 - **Telegram Bot**: Aiogram 3.x
 - **Scheduler**: APScheduler
 - **Async/await**: Полностью асинхронная архитектура
 - **Environment**: Python 3.10+
+- **Containerization**: Docker, Docker Compose
+- **Database functions**: PL/pgSQL для сложной логики (назначение дежурств)
 
 ## 📦 Установка и запуск
 
@@ -108,7 +144,9 @@ pip install -r requirements.txt
 ### 5. Инициализация базы данных
 
 ```bash
-# Создание и настройка БД
+# База данных создастся автоматически при первом запуске API
+python main.py
+# Или используйте миграции:
 python migrations/manage.py up
 ```
 
@@ -129,63 +167,121 @@ API будет доступен по адресу: <http://localhost:8000>
 python bot_runner.py
 ```
 
-### 7. Деплой в Docker (опционально)
+### 7. Деплой в Docker
 
 ```bash
-docker-compose up -d
+# Разработка
+docker-compose -f docker-compose.dev.yml up -d
+
+# Продакшн
+docker-compose -f docker-compose.prod.yml up -d
 ```
 
 ## 📋 Основные команды бота
 
 ### Для всех пользователей
 
-- `/start` - Начало работы, регистрация
-- `/help` - Справка по командам
-- `📊 Отчет по моему сектору` - Просмотр отчета
-- `💊 Отметить статус здоровья` - Изменить свой статус
-- `👤 Моя информация` - Информация о пользователе
+| Команда / Кнопка | Описание |
+|------------------|----------|
+| `/start` | Начало работы, регистрация |
+| `/help` | Справка по командам |
+| `📊 Отчет по моему сектору` | Просмотр отчета |
+| `💊 Отметить статус здоровья` | Изменить свой статус |
+| `👤 Моя информация` | Информация о пользователе |
 
 ### Для администраторов
 
-- `👑 Админ панель` - Панель управления
-- `/users` - Список всех пользователей
-- `/search Иванов` - Поиск пользователей
-- `/user_info ID` - Информация о пользователе
-- `/sector_report ID` - Отчет по сектору
-- `/toggle_admin ID` - Дать/забрать админ права
-- `/test_schedule` - Тест рассылки отчетов
+| Команда / Кнопка | Описание |
+|------------------|----------|
+| `👑 Админ панель` | Вход в панель управления |
+| `👨‍✈️ Управление дежурствами` | Вход в систему дежурств |
+| `🔍 Найти сотрудника` | Поиск по имени или ID |
+| `📋 Статистика` | Общая статистика системы |
+| `/users` | Список всех пользователей |
+| `/user_info ID` | Информация о пользователе |
+| `/sector_report ID` | Отчет по сектору |
+| `/toggle_admin ID` | Дать/забрать админ права |
+
+### 👨‍✈️ Команды управления дежурствами (в меню)
+
+| Кнопка | Описание |
+|--------|----------|
+| `📋 Пул дежурных` | Просмотр списка дежурных в секторе |
+| `➕ Добавить в пул` | Добавить администратора в пул |
+| `➖ Удалить из пула` | Удалить администратора из пула |
+| `📅 Назначить на неделю` | Автоматическое назначение дежурного |
+| `👤 Дежурный сегодня` | Кто дежурит сегодня |
+| `📊 Статистика сектора` | Аналитика по дежурствам |
 
 ## 🔧 API Endpoints
 
-### Пользователи
+### Пользователи (`/users`)
 
-- `GET /users/` - Список пользователей
-- `GET /users/{user_id}` - Информация о пользователе
-- `POST /users/` - Создание пользователя
-- `PUT /users/{user_id}` - Обновление пользователя
-- `GET /users/search/` - Поиск пользователей
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/users/` | Список пользователей |
+| GET | `/users/{user_id}` | Информация о пользователе |
+| POST | `/users/` | Создание пользователя |
+| PUT | `/users/{user_id}` | Обновление пользователя |
+| GET | `/users/search/` | Поиск пользователей |
+| GET | `/users/admin/list` | Список для админ-панели |
 
-### Отчеты о здоровье
+### Отчеты о здоровье (`/health`)
 
-- `GET /health/report` - Отчет по статусам
-- `PUT /users/{user_id}/health` - Обновление статуса
-- `GET /health/sectors` - Список секторов
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/health/report` | Отчет по статусам |
+| PUT | `/users/{user_id}/health` | Обновление статуса |
+| GET | `/health/sectors` | Список секторов |
 
-### Администрирование
+### Администрирование (`/admin`)
 
-- `PUT /admin/users/{user_id}/toggle-report` - Вкл/выкл отчеты
-- `PUT /admin/users/{user_id}/toggle-admin` - Вкл/выкл админа
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| PUT | `/admin/users/{user_id}/toggle-report` | Вкл/выкл отчеты |
+| PUT | `/admin/users/{user_id}/toggle-admin` | Вкл/выкл админа |
+
+### 👨‍✈️ Управление дежурствами (`/duty`)
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| POST | `/duty/pool` | Добавить в пул |
+| DELETE | `/duty/pool/{user_id}/{sector_id}` | Удалить из пула |
+| GET | `/duty/pool/sector/{sector_id}` | Пул сектора |
+| POST | `/duty/assign-weekly` | Назначить на неделю |
+| GET | `/duty/schedule` | Расписание |
+| GET | `/duty/schedule/today` | Дежурный сегодня |
+| GET | `/duty/statistics` | Статистика |
+| GET | `/duty/statistics/sector/{sector_id}/summary` | Сводка по сектору |
 
 ## 🗄️ Структура базы данных
 
-```sql
-users          - Основная информация о пользователях
-id_status      - Статусы и права пользователей
-fio            - ФИО пользователей
-health         - Статусы здоровья
-disease        - Заболевания
-sectors        - Сектора/отделы
-```
+### Основные таблицы
+
+| Таблица | Назначение |
+|---------|------------|
+| `users` | Основная информация о пользователях |
+| `id_status` | Статусы и права пользователей |
+| `fio` | ФИО пользователей |
+| `health` | Статусы здоровья |
+| `disease` | Заболевания |
+| `sectors` | Сектора/отделы |
+
+### 👨‍✈️ Таблицы дежурств
+
+| Таблица | Назначение |
+|---------|------------|
+| `duty_admin_pool` | Пул дежурных администраторов |
+| `duty_schedule` | Расписание дежурств |
+| `duty_statistics` | Статистика по годам |
+
+### Функции PostgreSQL
+
+| Функция | Назначение |
+|---------|------------|
+| `assign_weekly_duty_admin` | Автоматическое назначение дежурного на неделю |
+| `get_sector_duty_stats` | Получение статистики по сектору |
+| `get_monthly_duty_schedule` | Расписание на месяц |
 
 ## ⚙️ Настройка рассылки отчетов
 
@@ -219,18 +315,20 @@ pytest tests/ -v
 /test_schedule
 ```
 
-### Проверка работоспособности
+### Проверка системы дежурств
 
-1. Откройте <http://localhost:8000/docs> для проверки API
-2. Найдите бота в Telegram и отправьте `/start`
-3. Проверьте регистрацию и основные функции
+1. В админ-панели выберите "👨‍✈️ Управление дежурствами"
+2. Добавьте несколько администраторов в пул
+3. Назначьте дежурство на неделю
+4. Проверьте статистику и расписание
 
 ## 🔒 Безопасность
 
 - JWT аутентификация (в разработке)
-- Валидация всех входных данных
-- Защита от SQL-инъекций через ORM
+- Валидация всех входных данных через Pydantic
+- Защита от SQL-инъекций через ORM и параметризованные запросы
 - Разделение прав пользователей и администраторов
+- Мягкое удаление (деактивация) вместо физического удаления
 
 ## 📈 Мониторинг и логирование
 
@@ -238,6 +336,7 @@ pytest tests/ -v
 - Отслеживание ошибок и исключений
 - Мониторинг производительности API
 - Логи рассылки отчетов
+- Логи автоматического назначения дежурств
 
 ## 🔄 Миграции базы данных
 
@@ -250,6 +349,45 @@ python migrations/manage.py down
 
 # Показать статус
 python migrations/manage.py status
+
+# Создать новую миграцию
+alembic revision --autogenerate -m "description"
+```
+
+## 🐳 Windows Development & Production Deployment
+
+### Быстрый старт на Windows
+
+```powershell
+# Запустить как администратор в PowerShell
+.\init-windows.ps1
+
+# Запустить разработку
+.\deploy.ps1 -Build
+
+# Управление сервисами
+.\manage.ps1 start
+.\manage.ps1 stop
+.\manage.ps1 logs
+.\manage.ps1 migrate
+```
+
+### Доступ к сервисам
+
+| Сервис | URL | Логин/Пароль |
+|--------|-----|--------------|
+| API | <http://localhost:8000> | - |
+| API Docs | <http://localhost:8000/docs> | - |
+| PgAdmin | <http://localhost:5050> | <dev@example.com> / dev_password |
+
+### Деплой на Linux сервер
+
+```powershell
+# Настройка сервера
+.\deploy-linux.ps1 -Server your-server.com -Username ubuntu -Setup
+
+# Деплой приложения
+.\deploy-linux.ps1 -Server your-server.com -Username ubuntu
 ```
 
 ## 🤝 Вклад в проект
@@ -286,10 +424,7 @@ cp .env.example .env
 # 3. Установите зависимости
 pip install -r requirements.txt
 
-# 4. Инициализируйте БД
-python migrations/manage.py up
-
-# 5. Запустите в двух терминалах:
+# 4. Запустите в двух терминалах:
 # Терминал 1: API сервер
 python main.py
 
@@ -299,304 +434,32 @@ python bot_runner.py
 
 **Примечание:** Убедитесь что PostgreSQL запущен и доступен по указанным в `.env` параметрам.
 
-# 🐳 Health Tracker - Windows Development & Production Deployment
-
-## 🚀 Quick Start for Windows
-
-### Prerequisites
-
-1. **Docker Desktop for Windows** - [Download](https://www.docker.com/products/docker-desktop/)
-2. **WSL 2** (Recommended) - Enable in Docker Desktop settings
-3. **Git** - [Download](https://git-scm.com/download/win)
-
-### Initial Setup
-
-```powershell
-# Run as Administrator in PowerShell
-.\init-windows.ps1
-Development Environment
-Edit .env.windows and add your Telegram Bot Token
-
-Start development services:
-
-powershell
-.\deploy.ps1 -Build
-Management Commands
-powershell
-# Start all services
-.\manage.ps1 start
-
-# Stop all services
-.\manage.ps1 stop
-
-# View logs
-.\manage.ps1 logs
-.\manage.ps1 logs api-dev
-.\manage.ps1 logs bot-dev
-
-# Run migrations
-.\manage.ps1 migrate
-
-# Backup database
-.\manage.ps1 backup
-
-# Open shell in container
-.\manage.ps1 shell api-dev
-.\manage.ps1 shell postgres-dev
-
-# Clean Docker resources
-.\manage.ps1 clean
-Access Services
-API: http://localhost:8000
-
-API Docs: http://localhost:8000/docs
-
-PgAdmin: http://localhost:5050
-
-Login: dev@example.com
-
-Password: dev_password
-
-🏭 Production Deployment to Linux
-Prepare Production Server
-powershell
-# Setup server for first time
-.\deploy-linux.ps1 -Server your-server.com -Username ubuntu -Setup
-
-# Deploy application
-.\deploy-linux.ps1 -Server your-server.com -Username ubuntu
-Manual Server Setup (Alternative)
-bash
-# On your Linux server
-sudo apt update && sudo apt upgrade -y
-sudo apt install docker.io docker-compose git -y
-sudo systemctl enable docker
-sudo usermod -aG docker $USER
-
-mkdir -p /opt/health-tracker
-cd /opt/health-tracker
-Production Commands (on Linux server)
-bash
-# Start production
-cd /opt/health-tracker
-docker-compose -f docker-compose.prod.yml up -d
-
-# View logs
-docker-compose -f docker-compose.prod.yml logs -f
-
-# Stop production
-docker-compose -f docker-compose.prod.yml down
-
-# Backup database
-docker-compose -f docker-compose.prod.yml exec postgres \
-  pg_dump -U $POSTGRES_USER $POSTGRES_DB > backup_$(date +%Y%m%d_%H%M%S).sql
-🛠️ Development Tips for Windows
-1. Performance Optimization
-Store project in WSL 2 filesystem (e.g., /home/username/projects/)
-
-In Docker Desktop: Settings → Resources → Increase memory to 8GB
-
-Use .dockerignore to exclude unnecessary files
-
-2. Hot Reload
-API: Automatic reload when code changes
-
-Bot: Requires restart on changes: .\manage.ps1 restart bot-dev
-
-3. Database Management
-powershell
-# Access PostgreSQL
-.\manage.ps1 shell postgres-dev
-# Inside container:
-psql -U dev_user -d health_tracker_dev
-
-# Reset database
-.\manage.ps1 stop
-docker volume rm health_tracker_postgres_data_dev
-.\deploy.ps1 -Build
-4. Debugging
-powershell
-# View all logs
-.\manage.ps1 logs
-
-# Check container health
-docker ps
-docker-compose -f docker-compose.dev.yml ps
-
-# Inspect container
-docker exec -it health_tracker_api_dev sh
-🔧 Troubleshooting
-Docker Desktop Issues
-"Docker Desktop not starting"
-
-Check WSL 2 is installed: wsl --list --verbose
-
-Restart Docker Desktop as Administrator
-
-"Volume mounting not working"
-
-In Docker Desktop: Settings → Resources → File Sharing
-
-Add project folder to shared folders
-
-"Out of memory"
-
-Increase Docker Desktop memory limit
-
-Run: .\manage.ps1 clean
-
-Network Issues
-"Can't connect to localhost:8000"
-
-Check if API is running: .\manage.ps1 status
-
-Check firewall: Allow port 8000
-
-"Database connection refused"
-
-Wait for PostgreSQL to start (takes ~30 seconds)
-
-Check: .\manage.ps1 logs postgres-dev
-
-Bot Issues
-"Bot not responding"
-
-Check TELEGRAM_TOKEN in .env.windows
-
-Restart bot: .\manage.ps1 restart bot-dev
-
-Check logs: .\manage.ps1 logs bot-dev
-
-📦 Production Checklist
-Before Deployment
-.env.production filled with real values
-
-SECRET_KEY is strong and unique
-
-Database passwords are secure
-
-TELEGRAM_TOKEN is production bot token
-
-Backup strategy is in place
-
-After Deployment
-API responds at http://server:8000/
-
-Bot responds to /start
-
-Database migrations applied
-
-Logs are being written
-
-Backups are working
-
-🔐 Security Notes
-For Development
-Use dummy/test tokens
-
-Never commit .env.windows to git
-
-Use development database credentials
-
-For Production
-Use strong, unique passwords
-
-Enable firewall on server
-
-Regular security updates
-
-Monitor logs for suspicious activity
-
-Regular backups
-
-📞 Support
-Common Issues
-WSL 2 not working: Run PowerShell as Admin: wsl --install
-
-Docker Desktop error: Restart Docker Desktop service
-
-Volume permissions: Run Docker Desktop as Administrator
-
-Getting Help
-Check logs: .\manage.ps1 logs
-
-Check status: .\manage.ps1 status
-
-Search existing issues
-
-Create new issue with logs
-
-⭐ Enjoy developing on Windows! ⭐
-
-text
-
-## 10. Конфигурация для CI/CD (GitHub Actions)
-
-Создайте файл `.github/workflows/windows-ci.yml`:
-
-```yaml
-# .github/workflows/windows-ci.yml
-name: Windows CI/CD
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-
-jobs:
-  test-windows:
-    runs-on: windows-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-    
-    - name: Run tests
-      run: |
-        python -m pytest tests/ -v
-    
-    - name: Check code style
-      run: |
-        pip install black flake8
-        black --check app/ bot/
-        flake8 app/ bot/
-
-  build-docker:
-    runs-on: windows-latest
-    needs: test-windows
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-    
-    - name: Build Docker image
-      run: |
-        docker build -t health-tracker:latest .
-    
-    - name: Save Docker image
-      run: |
-        docker save health-tracker:latest -o health-tracker.tar
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: docker-image
-        path: health-tracker.tar
-
 ---
 
 ⭐ **Если проект вам понравился, поставьте звездочку на GitHub!** ⭐
+
+```text
+
+## Основные изменения в README.md:
+
+1. **Добавлен раздел "👨‍✈️ Система дежурных администраторов"** - подробно описывает функционал
+
+2. **Обновлена архитектура** - добавлены новые файлы и модули:
+   - `duty.py` в routes
+   - `duty.py` в models
+   - `duty_service.py` в services
+   - `duty.py` в handlers и keyboards бота
+
+3. **Добавлены команды бота для дежурств** - в раздел с таблицей
+
+4. **Добавлены API эндпоинты для дежурств** - новая таблица с методами `/duty/*`
+
+5. **Обновлена структура БД** - добавлены таблицы дежурств и функции PostgreSQL
+
+6. **Добавлен раздел с функциями PostgreSQL** - `assign_weekly_duty_admin`, `get_sector_duty_stats` и др.
+
+7. **Обновлен раздел тестирования** - добавлена проверка системы дежурств
+
+8. **Добавлены новые технологии** - PL/pgSQL, Alembic
+
+Этот README теперь полностью отражает функционал системы, включая новую подсистему дежурств.

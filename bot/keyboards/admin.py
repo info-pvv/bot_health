@@ -13,6 +13,7 @@ def get_admin_keyboard() -> types.ReplyKeyboardMarkup:
             [types.KeyboardButton(text="🔍 Найти сотрудника")],
             [types.KeyboardButton(text="👥 Список сотрудников")],
             [types.KeyboardButton(text="📋 Статистика")],
+            [types.KeyboardButton(text="👨‍✈️ Управление дежурствами")],
             [types.KeyboardButton(text="⬅️ Главное меню")],
         ],
         resize_keyboard=True,

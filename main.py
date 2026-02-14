@@ -49,11 +49,12 @@ app.add_middleware(
 )
 
 # Подключение роутеров
-from app.api.routes import health_router, users_router, admin_router
+from app.api.routes import health_router, users_router, admin_router, duty_router
 
 app.include_router(health_router)
 app.include_router(users_router)
 app.include_router(admin_router)
+app.include_router(duty_router)
 
 
 @app.get("/")
