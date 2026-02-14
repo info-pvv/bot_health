@@ -1,0 +1,50 @@
+# .github/workflows/deploy.yml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.8.0
+      with:
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+    
+    - name: Add server to known hosts
+      run: |
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
+    
+    - name: Deploy to server
+      run: |
+        ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} '
+          set -e
+          echo "🚀 Начинаю деплой..."
+          
+          echo "📂 Перехожу в папку проекта"
+          cd /opt/health-tracker || {
+            echo "❌ Папка не найдена!"
+            exit 1
+          }
+          
+          echo "🔄 Обновляю код из репозитория"
+          git pull origin main
+          
+          echo "🐳 Перезапускаю Docker контейнеры"
+          docker-compose -f docker-compose.prod.yml down
+          docker-compose -f docker-compose.prod.yml up -d --build
+          
+          echo "🧹 Очищаю старые образы"
+          docker system prune -f
+          
+          echo "✅ Деплой успешно завершен!"
+        '
