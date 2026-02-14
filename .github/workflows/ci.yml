@@ -68,18 +68,18 @@ jobs:
         echo "🚀 Начинаю деплой..."
         
         # Обновление кода
-        sudo git fetch origin main
-        sudo git reset --hard origin/main
+        git fetch origin main
+        git reset --hard origin/main
         
         # Перезапуск контейнеров
-        sudo docker compose -f docker-compose.prod.yml down
-        sudo docker compose -f docker-compose.prod.yml up -d --build
+        docker compose -f docker-compose.prod.yml down
+        docker compose -f docker-compose.prod.yml up -d --build
         
         # Проверка
         sleep 5
-        if ! sudo docker compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+        if ! docker compose -f docker-compose.prod.yml ps | grep -q "Up"; then
           echo "❌ Контейнеры не запустились!"
-          sudo docker compose -f docker-compose.prod.yml logs
+          docker compose -f docker-compose.prod.yml logs
           exit 1
         fi
         
