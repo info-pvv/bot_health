@@ -1,5 +1,4 @@
-# .github/workflows/windows-ci.yml
-name: Windows CI/CD
+name: CI/CD Pipeline
 
 on:
   push:
@@ -9,14 +8,14 @@ on:
 
 jobs:
   test-windows:
+    name: 🧪 Tests on Windows
     runs-on: windows-latest
-    
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -24,76 +23,81 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest-asyncio  # убедимся что установлено
     
-    - name: Create test env file
+    - name: Create test env
       run: |
         @"
         POSTGRES_USER=test_user
-        POSTGRES_PASSWORD=test_password
+        POSTGRES_PASSWORD=test_pass
         POSTGRES_HOST=localhost
-        POSTGRES_PORT=5432
         POSTGRES_DB=test_db
-        TELEGRAM_TOKEN=1234567890:test_token
-        SECRET_KEY=test_secret_key_123456
-        API_V1_PREFIX=/api/v1
-        PROJECT_NAME=Health Tracker Test
-        ENVIRONMENT=test
+        TELEGRAM_TOKEN=test_token
+        SECRET_KEY=test_key
         "@ | Out-File -FilePath .env.test -Encoding utf8
     
     #- name: Run tests
     #  run: |
     #    if (Test-Path tests/) {
-    #      Write-Host "🧪 Запускаю тесты..."
-    #      # Загружаем переменные из .env.test
-    #      if (Test-Path .env.test) {
-    #        Get-Content .env.test | ForEach-Object {
-    #          if ($_ -match '^([^#=]+)=(.*)$') {
-    #            [Environment]::SetEnvironmentVariable($matches[1], $matches[2])
-    #          }
+    #      Get-Content .env.test | ForEach-Object {
+    #        if ($_ -match '^([^#=]+)=(.*)$') {
+    #          [Environment]::SetEnvironmentVariable($matches[1], $matches[2])
     #        }
     #      }
     #      python -m pytest tests/ -v
     #    } else {
-    #      Write-Host "⚠️ Папка tests/ не найдена, пропускаю тесты"
+    #      Write-Host "⚠️ No tests found"
     #    }
     #  shell: pwsh
     - name: Run tests (disabled for now)
       run: |
         Write-Host "⚠️ Тесты временно отключены"
       shell: pwsh
-    - name: Check code style
-      run: |
-        pip install black flake8
-        Write-Host "🎨 Проверка стиля кода..."
-        black --check app/ bot/ --diff || Write-Host "⚠️ Black нашел проблемы"
-        flake8 app/ bot/ --count --select=E9,F63,F7,F82 --show-source --statistics || Write-Host "⚠️ Flake8 нашел проблемы"
-      shell: pwsh
-
-  build-docker:
-    runs-on: windows-latest
+  build-linux-image:
+    name: 🐳 Build Linux Docker image
+    runs-on: ubuntu-latest  # Важно! Linux для совместимости с сервером
     needs: test-windows
-    if: always()  # Запускать даже если тесты упали
+    if: github.ref == 'refs/heads/main'  # Только для main ветки
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v3
     
-    - name: Build Docker image
-      run: |
-        docker build -t health-tracker:latest .
-    
-    - name: Save Docker image
-      run: |
-        docker save health-tracker:latest -o health-tracker.tar
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4  
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
       with:
-        name: docker-image
-        path: health-tracker.tar
-        retention-days: 5  
-        if-no-files-found: warn  
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}:latest
+          ghcr.io/${{ github.repository }}:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  deploy:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-linux-image
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.PRODUCTION_HOST }}
+        username: ${{ secrets.PRODUCTION_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script: |
+          cd /opt/health-tracker
+          docker-compose -f docker-compose.prod.yml pull
+          docker-compose -f docker-compose.prod.yml up -d
+          docker system prune -f
