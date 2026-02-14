@@ -24,6 +24,10 @@ jobs:
         mkdir -p ~/.ssh
         ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
     
+    - name: Test SSH connection
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "echo '✅ SSH connection successful'"
+    
     - name: Deploy to server
       run: |
         ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} '
@@ -32,16 +36,28 @@ jobs:
           
           echo "📂 Перехожу в папку проекта"
           cd /opt/health-tracker || {
-            echo "❌ Папка не найдена!"
-            exit 1
+            echo "❌ Папка не найдена! Создаю..."
+            mkdir -p /opt/health-tracker
+            cd /opt/health-tracker
           }
+          
+          # Если папка пустая, клонируем репозиторий
+          if [ ! -d ".git" ]; then
+            echo "🔄 Клонирую репозиторий..."
+            git clone https://github.com/${{ github.repository }}.git .
+          fi
           
           echo "🔄 Обновляю код из репозитория"
           git pull origin main
           
           echo "🐳 Перезапускаю Docker контейнеры"
-          docker-compose -f docker-compose.prod.yml down
-          docker-compose -f docker-compose.prod.yml up -d --build
+          # Проверяем наличие docker-compose файла
+          if [ -f "docker-compose.prod.yml" ]; then
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml up -d --build
+          else
+            echo "⚠️ docker-compose.prod.yml не найден!"
+          fi
           
           echo "🧹 Очищаю старые образы"
           docker system prune -f
