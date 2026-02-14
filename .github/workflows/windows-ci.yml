@@ -91,7 +91,9 @@ jobs:
         docker save health-tracker:latest -o health-tracker.tar
     
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  
       with:
         name: docker-image
         path: health-tracker.tar
+        retention-days: 5  
+        if-no-files-found: warn  
