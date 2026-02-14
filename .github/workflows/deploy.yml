@@ -1,4 +1,3 @@
-# .github/workflows/deploy.yml
 name: Deploy to Production
 
 on:
@@ -8,57 +7,32 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted  # Теперь используем ваш локальный runner
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
     
-    - name: Setup SSH
-      uses: webfactory/ssh-agent@v0.8.0
-      with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-    
-    - name: Debug secrets
-      run: |
-        echo "Host: ${{ secrets.PRODUCTION_HOST }}"
-        echo "User: ${{ secrets.PRODUCTION_USER }}"
-        echo "Key length: $(echo '${{ secrets.SSH_PRIVATE_KEY }}' | wc -c) characters"
-    
     - name: Deploy to server
       run: |
-        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} '
-          set -e
-          echo "🚀 Начинаю деплой..."
-          
-          echo "📂 Перехожу в папку проекта"
-          cd /opt/health-tracker || {
-            echo "❌ Папка не найдена! Создаю..."
-            sudo mkdir -p /opt/health-tracker
-            sudo chown $USER:$USER /opt/health-tracker
-            cd /opt/health-tracker
-          }
-          
-          # Если папка пустая, клонируем репозиторий
-          if [ ! -d ".git" ]; then
-            echo "🔄 Клонирую репозиторий..."
-            git clone https://github.com/${{ github.repository }}.git .
-          fi
-          
-          echo "🔄 Обновляю код из репозитория"
-          git pull origin main
-          
-          echo "🐳 Перезапускаю Docker контейнеры"
-          if [ -f "docker-compose.prod.yml" ]; then
-            docker-compose -f docker-compose.prod.yml down
-            docker-compose -f docker-compose.prod.yml up -d --build
-          else
-            echo "⚠️ docker-compose.prod.yml не найден!"
-            ls -la
-          fi
-          
-          echo "🧹 Очищаю старые образы"
-          docker system prune -f
-          
-          echo "✅ Деплой успешно завершен!"
-        '
+        cd /opt/health-tracker || {
+          echo "📁 Создаю папку проекта..."
+          sudo mkdir -p /opt/health-tracker
+          sudo chown $USER:$USER /opt/health-tracker
+          cd /opt/health-tracker
+        }
+        
+        # Клонируем репозиторий если нужно
+        if [ ! -d ".git" ]; then
+          echo "🔄 Клонирую репозиторий..."
+          git clone https://github.com/info-pvv/bot_health.git .
+        fi
+        
+        echo "🔄 Обновляю код"
+        git pull origin main
+        
+        echo "🐳 Перезапускаю Docker контейнеры"
+        docker-compose -f docker-compose.prod.yml down
+        docker-compose -f docker-compose.prod.yml up -d --build
+        
+        echo "✅ Деплой завершен!"
