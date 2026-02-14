@@ -19,25 +19,23 @@ jobs:
       with:
         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
     
-    - name: Add server to known hosts
+    - name: Debug secrets
       run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -H ${{ secrets.PRODUCTION_HOST }} >> ~/.ssh/known_hosts
-    
-    - name: Test SSH connection
-      run: |
-        ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} "echo '✅ SSH connection successful'"
+        echo "Host: ${{ secrets.PRODUCTION_HOST }}"
+        echo "User: ${{ secrets.PRODUCTION_USER }}"
+        echo "Key length: $(echo '${{ secrets.SSH_PRIVATE_KEY }}' | wc -c) characters"
     
     - name: Deploy to server
       run: |
-        ssh ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} '
+        ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} '
           set -e
           echo "🚀 Начинаю деплой..."
           
           echo "📂 Перехожу в папку проекта"
           cd /opt/health-tracker || {
             echo "❌ Папка не найдена! Создаю..."
-            mkdir -p /opt/health-tracker
+            sudo mkdir -p /opt/health-tracker
+            sudo chown $USER:$USER /opt/health-tracker
             cd /opt/health-tracker
           }
           
@@ -51,12 +49,12 @@ jobs:
           git pull origin main
           
           echo "🐳 Перезапускаю Docker контейнеры"
-          # Проверяем наличие docker-compose файла
           if [ -f "docker-compose.prod.yml" ]; then
             docker-compose -f docker-compose.prod.yml down
             docker-compose -f docker-compose.prod.yml up -d --build
           else
             echo "⚠️ docker-compose.prod.yml не найден!"
+            ls -la
           fi
           
           echo "🧹 Очищаю старые образы"
