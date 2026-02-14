@@ -39,11 +39,11 @@ jobs:
         fi
         
         echo "🐳 Перезапускаю Docker контейнеры"
-        if [ -f "docker-compose.prod.yml" ]; then
-          docker-compose -f docker-compose.prod.yml down
-          docker-compose -f docker-compose.prod.yml up -d --build
+        if [ -f "docker compose.prod.yml" ]; then
+          docker-compose -f docker compose.prod.yml down
+          docker-compose -f docker compose.prod.yml up -d --build
         else
-          echo "⚠️ docker-compose.prod.yml не найден!"
+          echo "⚠️ docker compose.prod.yml не найден!"
           ls -la
         fi
         
