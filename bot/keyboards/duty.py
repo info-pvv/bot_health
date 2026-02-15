@@ -2,10 +2,13 @@
 """
 Клавиатуры для системы дежурств
 """
+import logging
 from aiogram import types
 from aiogram.utils.keyboard import InlineKeyboardBuilder  # ← ВАЖНО: правильный импорт
 from typing import List, Dict, Optional
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 
 def get_duty_main_keyboard() -> types.InlineKeyboardMarkup:
@@ -288,4 +291,98 @@ def get_year_navigation_keyboard(
             text="🔙 Назад", callback_data=f"schedule_view_menu:{sector_id}"
         )
     )
+    return builder.as_markup()
+
+
+# bot/keyboards/duty.py - добавьте новые функции
+
+
+def get_date_selection_keyboard(sector_id: int) -> types.InlineKeyboardMarkup:
+    """Клавиатура для выбора типа даты"""
+    logger.info(f"🔍 Создание клавиатуры для сектора {sector_id}")
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        types.InlineKeyboardButton(
+            text="📅 Конкретный день", callback_data=f"duty_ask_custom_date:{sector_id}"
+        ),
+        types.InlineKeyboardButton(
+            text="📆 Конкретная неделя",
+            callback_data=f"duty_select_custom_week:{sector_id}",
+        ),
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="🔙 Назад к списку админов",
+            callback_data=f"duty_manual_sector:{sector_id}",
+        )
+    )
+    return builder.as_markup()
+
+
+def get_week_selection_keyboard(
+    sector_id: int, year: int, month: int
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура для выбора недели в месяце"""
+    import calendar
+    from datetime import date
+
+    builder = InlineKeyboardBuilder()
+
+    # Получаем календарь на месяц
+    cal = calendar.monthcalendar(year, month)
+
+    # Для каждой недели в месяце
+    for week_num, week in enumerate(cal, 1):
+        # Находим первый и последний день недели
+        days = [d for d in week if d != 0]
+        if days:
+            first_day = days[0]
+            last_day = days[-1]
+            week_start = date(year, month, first_day)
+            week_end = date(year, month, last_day)
+
+            builder.row(
+                types.InlineKeyboardButton(
+                    text=f"Неделя {week_num}: {week_start.strftime('%d.%m')} - {week_end.strftime('%d.%m')}",
+                    callback_data=f"duty_confirm_week:{sector_id}:{week_start.isoformat()}",
+                )
+            )
+
+    # Навигация по месяцам
+    # Предыдущий месяц
+    prev_month = month - 1
+    prev_year = year
+    if prev_month == 0:
+        prev_month = 12
+        prev_year = year - 1
+
+    # Следующий месяц
+    next_month = month + 1
+    next_year = year
+    if next_month == 13:
+        next_month = 1
+        next_year = year + 1
+
+    # Добавляем строку с навигацией
+    builder.row(
+        types.InlineKeyboardButton(
+            text="◀ Предыдущий",
+            callback_data=f"duty_week_month:{sector_id}:{prev_year}:{prev_month}",
+        ),
+        types.InlineKeyboardButton(
+            text=f"{calendar.month_name[month]} {year}", callback_data="current"
+        ),
+        types.InlineKeyboardButton(
+            text="Следующий ▶",
+            callback_data=f"duty_week_month:{sector_id}:{next_year}:{next_month}",
+        ),
+    )
+
+    # Кнопка возврата
+    builder.row(
+        types.InlineKeyboardButton(
+            text="🔙 Назад", callback_data=f"duty_select_custom_day:{sector_id}"
+        )
+    )
+
     return builder.as_markup()

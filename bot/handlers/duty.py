@@ -28,6 +28,8 @@ from bot.keyboards.duty import (
     get_schedule_view_keyboard,
     get_month_navigation_keyboard,
     get_year_navigation_keyboard,
+    get_date_selection_keyboard,
+    get_week_selection_keyboard,
 )
 from bot.keyboards.admin import get_admin_keyboard
 
@@ -499,7 +501,11 @@ async def duty_assign_week_manual_start(
 
 
 async def duty_manual_sector_selected(callback: types.CallbackQuery, state: FSMContext):
-    """Ручное назначение - сектор выбран, показать доступных админов"""
+    """Ручное назначение - сектор выбран"""
+    logger.info(f"🔍 Вход в duty_manual_sector_selected")
+    current_state = await state.get_state()
+    logger.info(f"🔍 Текущее состояние: {current_state}")
+
     await callback.answer()
 
     parts = callback.data.split(":")
@@ -517,7 +523,6 @@ async def duty_manual_sector_selected(callback: types.CallbackQuery, state: FSMC
         )
         return
 
-    # Сохраняем sector_id в состоянии
     await state.update_data(manual_sector_id=sector_id)
 
     # Определяем следующую неделю
@@ -528,11 +533,10 @@ async def duty_manual_sector_selected(callback: types.CallbackQuery, state: FSMC
     next_monday = today + timedelta(days=days_until_monday)
     week_start_str = next_monday.isoformat()
 
-    # Сохраняем week_start
     await state.update_data(manual_week_start=week_start_str)
 
-    # Получаем доступных админов
     try:
+        # Получаем доступных админов на ближайшую неделю
         available = await api_client.get_available_admins(
             sector_id=sector_id, week_start=week_start_str, exclude_last_week=True
         )
@@ -546,40 +550,27 @@ async def duty_manual_sector_selected(callback: types.CallbackQuery, state: FSMC
 
         admins = available.get("available_admins", [])
 
-        if not admins:
-            # Если нет доступных с исключением, предлагаем всех
-            available_all = await api_client.get_available_admins(
-                sector_id=sector_id, week_start=week_start_str, exclude_last_week=False
-            )
-            admins = available_all.get("available_admins", [])
-
-            if not admins:
-                await callback.message.edit_text(
-                    "❌ Нет доступных администраторов в пуле",
-                    reply_markup=get_duty_main_keyboard(),
-                )
-                await state.set_state(DutyStates.waiting_for_action)
-                return
-
-        # Создаем клавиатуру с админами
         builder = InlineKeyboardBuilder()
-        for admin in admins:
-            name = admin.get("user_name", f"ID {admin['user_id']}")
-            duties = admin.get("total_duties", 0)
-            builder.row(
-                types.InlineKeyboardButton(
-                    text=f"{name} ({duties} деж.)",
-                    callback_data=f"duty_manual_select:{sector_id}:{week_start_str}:{admin['user_id']}",
-                )
-            )
 
-        # Добавляем опцию принудительного назначения
+        if admins:
+            for admin in admins:
+                name = admin.get("user_name", f"ID {admin['user_id']}")
+                duties = admin.get("total_duties", 0)
+                builder.row(
+                    types.InlineKeyboardButton(
+                        text=f"{name} ({duties} деж.)",
+                        callback_data=f"duty_manual_select:{sector_id}:{week_start_str}:{admin['user_id']}",
+                    )
+                )
+
+        # Добавляем кнопку для выбора другой даты/недели
         builder.row(
             types.InlineKeyboardButton(
-                text="🔄 Принудительно (перезаписать)",
-                callback_data=f"duty_manual_force:{sector_id}:{week_start_str}",
+                text="📅 Выбрать другую дату/неделю",
+                callback_data=f"duty_select_custom_day:{sector_id}",
             )
         )
+
         builder.row(
             types.InlineKeyboardButton(
                 text="🔙 Назад к секторам", callback_data="duty_assign_week_manual"
@@ -593,12 +584,16 @@ async def duty_manual_sector_selected(callback: types.CallbackQuery, state: FSMC
         await callback.message.edit_text(
             f"👤 **Выберите дежурного администратора**\n\n"
             f"🏢 Сектор: {sector_id}\n"
-            f"📅 Неделя: {next_monday.strftime('%d.%m.%Y')} - {week_end}\n\n"
-            f"Доступные администраторы:",
+            f"📅 Ближайшая неделя: {next_monday.strftime('%d.%m.%Y')} - {week_end}\n\n"
+            f"или нажмите кнопку ниже для выбора другой даты:",
             reply_markup=builder.as_markup(),
             parse_mode="Markdown",
         )
+
+        # ВАЖНО: оставляем состояние waiting_for_user_selection
+        # чтобы можно было выбрать админа из списка
         await state.set_state(DutyStates.waiting_for_user_selection)
+        logger.info(f"🔍 Установлено состояние: {await state.get_state()}")
 
     except Exception as e:
         logger.error(f"Ошибка при получении списка админов: {e}")
@@ -1795,3 +1790,412 @@ async def duty_manual_select_start(callback: types.CallbackQuery, state: FSMCont
             f"❌ Ошибка при загрузке данных: {str(e)}",
             reply_markup=get_duty_back_keyboard(),
         )
+
+
+@admin_only
+@admin_only
+async def duty_select_custom_day(callback: types.CallbackQuery, state: FSMContext):
+    """Выбор произвольного дня"""
+    logger.info("🔍🔍🔍 duty_select_custom_day ВЫЗВАНА! 🔍🔍🔍")
+    logger.info(f"🔍 callback.data: {callback.data}")
+
+    current_state = await state.get_state()
+    logger.info(f"🔍 Текущее состояние до: {current_state}")
+
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.message.edit_text(
+            "❌ Ошибка данных.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    sector_id = int(parts[1])
+    logger.info(f"🔍 sector_id: {sector_id}")
+    await state.update_data(manual_sector_id=sector_id)
+
+    keyboard = get_date_selection_keyboard(sector_id)
+
+    await callback.message.edit_text(
+        f"📅 **Выберите тип назначения**\n\n"
+        f"Сектор: {sector_id}\n\n"
+        f"Вы можете назначить дежурного на конкретный день или на целую неделю:",
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+
+    await state.set_state(DutyStates.waiting_for_custom_date)
+    logger.info(f"🔍 Установлено состояние после: {await state.get_state()}")
+
+
+async def duty_select_custom_week(callback: types.CallbackQuery, state: FSMContext):
+    """Выбор произвольной недели"""
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.message.edit_text(
+            "❌ Ошибка данных.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    sector_id = int(parts[1])
+
+    # Текущая дата
+    today = date.today()
+
+    # Показываем календарь на текущий месяц
+    keyboard = get_week_selection_keyboard(sector_id, today.year, today.month)
+
+    await callback.message.edit_text(
+        f"📆 **Выберите неделю**\n\n"
+        f"Сектор: {sector_id}\n"
+        f"Нажмите на нужную неделю для назначения:",
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+    await state.set_state(DutyStates.waiting_for_custom_week)
+
+
+async def duty_week_month_navigate(callback: types.CallbackQuery, state: FSMContext):
+    """Навигация по месяцам для выбора недели"""
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.message.edit_text(
+            "❌ Ошибка данных.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    sector_id = int(parts[1])
+    year = int(parts[2])
+    month = int(parts[3])
+
+    keyboard = get_week_selection_keyboard(sector_id, year, month)
+
+    await callback.message.edit_text(
+        f"📆 **Выберите неделю**\n\n"
+        f"Сектор: {sector_id}\n"
+        f"Нажмите на нужную неделю для назначения:",
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+
+
+async def duty_ask_custom_date(callback: types.CallbackQuery, state: FSMContext):
+    """Запрос ввода произвольной даты"""
+    logger.info("🔍🔍🔍 duty_ask_custom_date ВЫЗВАНА! 🔍🔍🔍")
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.message.edit_text(
+            "❌ Ошибка данных.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    sector_id = int(parts[1])
+    logger.info(f"🔍 sector_id: {sector_id}")
+    await state.update_data(manual_sector_id=sector_id)
+
+    # Устанавливаем состояние ожидания ввода даты
+    await state.set_state(DutyStates.waiting_for_date_input)
+
+    await callback.message.edit_text(
+        f"📅 **Введите дату**\n\n"
+        f"Сектор: {sector_id}\n\n"
+        f"Введите дату в формате **ДД.ММ.ГГГГ**\n"
+        f"Например: 25.12.2026\n\n"
+        f"Или нажмите кнопку ниже для отмены:",
+        reply_markup=types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text="🔙 Отмена",
+                        callback_data=f"duty_back_to_date_menu:{sector_id}",
+                    )
+                ]
+            ]
+        ),
+        parse_mode="Markdown",
+    )
+
+
+async def duty_back_to_date_menu(callback: types.CallbackQuery, state: FSMContext):
+    """Возврат в меню выбора даты"""
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    if len(parts) < 2:
+        await callback.message.edit_text(
+            "❌ Ошибка данных.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    sector_id = int(parts[1])
+
+    # Возвращаемся в меню выбора типа даты
+    keyboard = get_date_selection_keyboard(sector_id)
+
+    await callback.message.edit_text(
+        f"📅 **Выберите тип назначения**\n\n"
+        f"Сектор: {sector_id}\n\n"
+        f"Вы можете назначить дежурного на конкретный день или на целую неделю:",
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+    await state.set_state(DutyStates.waiting_for_custom_date)
+
+
+async def process_custom_date(message: types.Message, state: FSMContext):
+    """Обработка введенной даты"""
+    from datetime import datetime
+
+    try:
+        # Парсим дату из сообщения
+        date_str = message.text.strip()
+        selected_date = datetime.strptime(date_str, "%d.%m.%Y").date()
+
+        # Проверяем, что дата не в прошлом
+        if selected_date < date.today():
+            await message.answer(
+                "❌ Дата не может быть в прошлом. Введите будущую дату:"
+            )
+            return
+
+        data = await state.get_data()
+        sector_id = data.get("manual_sector_id")
+
+        if not sector_id:
+            await message.answer(
+                "❌ Ошибка: не найден ID сектора", reply_markup=get_duty_main_keyboard()
+            )
+            await state.clear()
+            return
+
+        # Получаем доступных админов
+        available = await api_client.get_available_admins(
+            sector_id=sector_id,
+            week_start=selected_date.isoformat(),
+            exclude_last_week=False,
+        )
+
+        if "error" in available:
+            await message.answer(
+                f"❌ Ошибка: {available['error']}",
+                reply_markup=get_duty_main_keyboard(),
+            )
+            await state.clear()
+            return
+
+        admins = available.get("available_admins", [])
+
+        if not admins:
+            await message.answer(
+                "❌ Нет доступных администраторов в пуле",
+                reply_markup=get_duty_main_keyboard(),
+            )
+            await state.clear()
+            return
+
+        # Создаем клавиатуру с админами
+        builder = InlineKeyboardBuilder()
+        for admin in admins:
+            name = admin.get("user_name", f"ID {admin['user_id']}")
+            duties = admin.get("total_duties", 0)
+            builder.row(
+                types.InlineKeyboardButton(
+                    text=f"{name} ({duties} деж.)",
+                    callback_data=f"duty_manual_select_day:{sector_id}:{selected_date.isoformat()}:{admin['user_id']}",
+                )
+            )
+
+        builder.row(
+            types.InlineKeyboardButton(
+                text="🔙 Назад", callback_data=f"duty_select_custom_day:{sector_id}"
+            )
+        )
+
+        await message.answer(
+            f"👤 **Выберите дежурного на {selected_date.strftime('%d.%m.%Y')}**\n\n"
+            f"Доступные администраторы:",
+            reply_markup=builder.as_markup(),
+            parse_mode="Markdown",
+        )
+        await state.set_state(DutyStates.waiting_for_user_selection)
+
+    except ValueError:
+        await message.answer(
+            "❌ Неверный формат даты. Используйте ДД.ММ.ГГГГ\n" "Например: 25.12.2026"
+        )
+
+
+async def duty_manual_select_day(callback: types.CallbackQuery, state: FSMContext):
+    """Назначение на конкретный день"""
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.message.edit_text(
+            "❌ Ошибка данных.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    try:
+        sector_id = int(parts[1])
+        selected_date = parts[2]
+        user_id = int(parts[3])
+    except ValueError:
+        await callback.message.edit_text(
+            "❌ Некорректные данные.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    # Показываем сообщение о начале назначения
+    await callback.message.edit_text("⏳ Назначаю дежурного...", reply_markup=None)
+
+    # Назначаем на один день (используем ту же неделю, но force=true для одного дня)
+    result = await api_client.assign_weekly_manual(
+        sector_id=sector_id,
+        week_start=selected_date,  # для одного дня используем эту же дату как начало недели
+        user_id=user_id,
+        created_by=callback.from_user.id,
+        force=True,  # Перезаписываем конкретный день
+    )
+
+    if "error" in result:
+        error_text = result.get("error", "Неизвестная ошибка")
+        await callback.message.edit_text(
+            f"❌ **Ошибка назначения**\n\n{error_text}",
+            reply_markup=get_duty_main_keyboard(),
+            parse_mode="Markdown",
+        )
+    else:
+        selected_date_obj = datetime.strptime(selected_date, "%Y-%m-%d").date()
+        await callback.message.edit_text(
+            f"✅ **Дежурство успешно назначено!**\n\n"
+            f"🏢 Сектор: {sector_id}\n"
+            f"👤 Дежурный: {result.get('assigned_user_name', f'ID {user_id}')}\n"
+            f"📅 Дата: {selected_date_obj.strftime('%d.%m.%Y')}",
+            reply_markup=get_duty_main_keyboard(),
+            parse_mode="Markdown",
+        )
+
+    await state.set_state(DutyStates.waiting_for_action)
+
+
+async def duty_confirm_week(callback: types.CallbackQuery, state: FSMContext):
+    """Подтверждение выбранной недели"""
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    if len(parts) < 3:
+        await callback.message.edit_text(
+            "❌ Ошибка данных.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    sector_id = int(parts[1])
+    week_start = parts[2]
+
+    # Получаем доступных админов
+    available = await api_client.get_available_admins(
+        sector_id=sector_id, week_start=week_start, exclude_last_week=False
+    )
+
+    if "error" in available:
+        await callback.message.edit_text(
+            f"❌ Ошибка: {available['error']}", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    admins = available.get("available_admins", [])
+
+    if not admins:
+        await callback.message.edit_text(
+            "❌ Нет доступных администраторов в пуле",
+            reply_markup=get_duty_main_keyboard(),
+        )
+        await state.set_state(DutyStates.waiting_for_action)
+        return
+
+    # Создаем клавиатуру с админами
+    builder = InlineKeyboardBuilder()
+    for admin in admins:
+        name = admin.get("user_name", f"ID {admin['user_id']}")
+        duties = admin.get("total_duties", 0)
+        builder.row(
+            types.InlineKeyboardButton(
+                text=f"{name} ({duties} деж.)",
+                callback_data=f"duty_manual_select_week:{sector_id}:{week_start}:{admin['user_id']}",
+            )
+        )
+
+    week_start_date = datetime.strptime(week_start, "%Y-%m-%d").date()
+    week_end = week_start_date + timedelta(days=6)
+
+    await callback.message.edit_text(
+        f"👤 **Выберите дежурного на неделю**\n\n"
+        f"🏢 Сектор: {sector_id}\n"
+        f"📅 Неделя: {week_start_date.strftime('%d.%m.%Y')} - {week_end.strftime('%d.%m.%Y')}\n\n"
+        f"Доступные администраторы:",
+        reply_markup=builder.as_markup(),
+        parse_mode="Markdown",
+    )
+    await state.set_state(DutyStates.waiting_for_user_selection)
+
+
+async def duty_manual_select_week(callback: types.CallbackQuery, state: FSMContext):
+    """Назначение на выбранную неделю"""
+    await callback.answer()
+
+    parts = callback.data.split(":")
+    if len(parts) < 4:
+        await callback.message.edit_text(
+            "❌ Ошибка данных.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    try:
+        sector_id = int(parts[1])
+        week_start = parts[2]
+        user_id = int(parts[3])
+    except ValueError:
+        await callback.message.edit_text(
+            "❌ Некорректные данные.", reply_markup=get_duty_back_keyboard()
+        )
+        return
+
+    await callback.message.edit_text("⏳ Назначаю дежурного...", reply_markup=None)
+
+    result = await api_client.assign_weekly_manual(
+        sector_id=sector_id,
+        week_start=week_start,
+        user_id=user_id,
+        created_by=callback.from_user.id,
+        force=True,
+    )
+
+    if "error" in result:
+        error_text = result.get("error", "Неизвестная ошибка")
+        await callback.message.edit_text(
+            f"❌ **Ошибка назначения**\n\n{error_text}",
+            reply_markup=get_duty_main_keyboard(),
+            parse_mode="Markdown",
+        )
+    else:
+        week_start_date = datetime.strptime(week_start, "%Y-%m-%d").date()
+        week_end = week_start_date + timedelta(days=6)
+
+        await callback.message.edit_text(
+            f"✅ **Дежурство успешно назначено!**\n\n"
+            f"🏢 Сектор: {sector_id}\n"
+            f"👤 Дежурный: {result.get('assigned_user_name', f'ID {user_id}')}\n"
+            f"📅 Неделя: {week_start_date.strftime('%d.%m.%Y')} - {week_end.strftime('%d.%m.%Y')}",
+            reply_markup=get_duty_main_keyboard(),
+            parse_mode="Markdown",
+        )
+
+    await state.set_state(DutyStates.waiting_for_action)

@@ -65,3 +65,9 @@ class DutyStates(StatesGroup):
     waiting_for_stats_sector = State()  # Ожидание выбора сектора для статистики
     waiting_for_stats_year = State()  # Ожидание выбора года для статистики
     waiting_for_stats_view = State()  # Просмотр статистики
+
+    waiting_for_custom_date = State()  # Ожидание ввода произвольной даты
+    waiting_for_custom_week = State()  # Ожидание ввода произвольной недели
+    waiting_for_date_confirmation = State()
+
+    waiting_for_date_input = State()  # Ожидание ввода даты вручную

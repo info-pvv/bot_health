@@ -10,6 +10,7 @@ from aiogram.filters import Command
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram import types
 from bot.scheduler import ReportScheduler
+from aiogram.fsm.context import FSMContext
 
 from bot.config import TOKEN
 
@@ -96,6 +97,15 @@ from bot.handlers.duty import (
     schedule_year_navigate,
     schedule_view_menu,
     duty_manual_select_start,
+    duty_select_custom_day,
+    duty_select_custom_week,
+    duty_week_month_navigate,
+    duty_ask_custom_date,
+    process_custom_date,
+    duty_manual_select_day,
+    duty_confirm_week,
+    duty_manual_select_week,
+    duty_back_to_date_menu,
 )
 
 # Импорт состояний из центрального файла
@@ -430,11 +440,80 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         DutyStates.waiting_for_week_selection,
     )
 
+    # Выбор типа назначения (день/неделя)
+    dp.callback_query.register(
+        duty_select_custom_day,
+        F.data.startswith("duty_select_custom_day:"),
+        # DutyStates.waiting_for_custom_date,
+    )
+
+    # Выбор произвольной недели
+    dp.callback_query.register(
+        duty_select_custom_week,
+        F.data.startswith("duty_select_custom_week:"),
+        # DutyStates.waiting_for_custom_week,
+    )
+
+    # Навигация по месяцам для выбора недели
+    dp.callback_query.register(
+        duty_week_month_navigate,
+        F.data.startswith("duty_week_month:"),
+        DutyStates.waiting_for_custom_week,
+    )
+
+    # Запрос ввода произвольной даты
+    dp.callback_query.register(
+        duty_ask_custom_date,
+        F.data.startswith("duty_ask_custom_date:"),
+        # DutyStates.waiting_for_custom_date,
+    )
+
+    dp.callback_query.register(
+        duty_back_to_date_menu,
+        F.data.startswith("duty_back_to_date_menu:"),
+        # DutyStates.waiting_for_date_input,
+    )
+
+    # Обработка введенной даты (сообщение)
+    dp.message.register(
+        process_custom_date,
+        DutyStates.waiting_for_date_input,
+    )
+
+    # Назначение на конкретный день
+    dp.callback_query.register(
+        duty_manual_select_day,
+        F.data.startswith("duty_manual_select_day:"),
+        DutyStates.waiting_for_user_selection,
+    )
+
+    # Подтверждение выбранной недели
+    dp.callback_query.register(
+        duty_confirm_week,
+        F.data.startswith("duty_confirm_week:"),
+        DutyStates.waiting_for_custom_week,
+    )
+
+    # Назначение на выбранную неделю
+    dp.callback_query.register(
+        duty_manual_select_week,
+        F.data.startswith("duty_manual_select_week:"),
+        DutyStates.waiting_for_user_selection,
+    )
+
     @dp.callback_query()
-    async def debug_all_callbacks(callback: types.CallbackQuery):
-        """Отладочный обработчик - показывает все callback данные"""
+    async def debug_all_callbacks(callback: types.CallbackQuery, state: FSMContext):
+        """Отладочный обработчик - показывает все callback данные и состояние"""
+        current_state = await state.get_state()
         logger.info(f"🔍 DEBUG: Получен callback: '{callback.data}'")
-        await callback.answer(f"Получен: {callback.data[:50]}")
+        logger.info(f"🔍 DEBUG: Текущее состояние: {current_state}")
+        logger.info(f"🔍 DEBUG: Тип callback: {type(callback.data)}")
+
+        # Показываем все зарегистрированные обработчики для этого префикса
+        if callback.data.startswith("duty_select_custom_day:"):
+            logger.info(f"🔍 DEBUG: Найден обработчик для duty_select_custom_day")
+
+        await callback.answer(f"Обработка: {callback.data[:50]}")
 
     return bot, dp
 
