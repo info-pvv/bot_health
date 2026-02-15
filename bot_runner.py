@@ -42,8 +42,8 @@ async def run_with_scheduler():
     scheduler = ReportScheduler(bot)
 
     # Настройка расписания
-    scheduler.schedule_daily_report("15:42")
-    scheduler.start()
+    # scheduler.schedule_daily_report("15:42")
+    # scheduler.start()
 
     # Запуск бота
     try:
