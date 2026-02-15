@@ -1,7 +1,7 @@
+# bot/states.py
 """
 Состояния FSM для бота
 """
-
 from aiogram.fsm.state import State, StatesGroup
 
 
@@ -36,8 +36,32 @@ class ScheduleStates(StatesGroup):
 class DutyStates(StatesGroup):
     """Состояния для управления дежурствами"""
 
+    # Основные состояния
     waiting_for_action = State()  # Ожидание действия в меню дежурств
     waiting_for_sector_selection = State()  # Ожидание выбора сектора
     waiting_for_user_selection = State()  # Ожидание выбора пользователя для добавления
     waiting_for_user_removal = State()  # Ожидание выбора пользователя для удаления
-    waiting_for_week_selection = State()  # Ожидание подтверждения недели для назначения
+
+    # Состояния для назначения на период
+    waiting_for_week_selection = State()  # Ожидание подтверждения недели (старый метод)
+    waiting_for_period_selection = (
+        State()
+    )  # Ожидание выбора периода (день/неделя/месяц/год)
+    waiting_for_period_confirmation = State()  # Ожидание подтверждения периода
+
+    # Состояния для планирования
+    waiting_for_plan_year = State()  # Ожидание ввода года
+    waiting_for_plan_confirmation = (
+        State()
+    )  # Ожидание подтверждения планирования на год
+    waiting_for_plan_execution = State()  # Выполнение планирования
+
+    # Состояния для проверки доступности
+    waiting_for_check_start = State()  # Ожидание начала периода проверки
+    waiting_for_check_end = State()  # Ожидание конца периода проверки
+    waiting_for_check_results = State()  # Просмотр результатов проверки
+
+    # Состояния для статистики
+    waiting_for_stats_sector = State()  # Ожидание выбора сектора для статистики
+    waiting_for_stats_year = State()  # Ожидание выбора года для статистики
+    waiting_for_stats_view = State()  # Просмотр статистики

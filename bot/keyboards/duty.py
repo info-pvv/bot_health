@@ -5,6 +5,7 @@
 from aiogram import types
 from aiogram.utils.keyboard import InlineKeyboardBuilder  # ← ВАЖНО: правильный импорт
 from typing import List, Dict, Optional
+from datetime import date
 
 
 def get_duty_main_keyboard() -> types.InlineKeyboardMarkup:
@@ -23,7 +24,7 @@ def get_duty_main_keyboard() -> types.InlineKeyboardMarkup:
             text="➖ Удалить из пула", callback_data="duty_remove_from_pool"
         ),
         types.InlineKeyboardButton(
-            text="📅 Назначить на неделю", callback_data="duty_assign_week"
+            text="📅 Назначить на период", callback_data="duty_assign_period"
         ),
     )
     builder.row(
@@ -31,7 +32,15 @@ def get_duty_main_keyboard() -> types.InlineKeyboardMarkup:
             text="👤 Дежурный сегодня", callback_data="duty_today"
         ),
         types.InlineKeyboardButton(
-            text="📊 Статистика сектора", callback_data="duty_stats"
+            text="📊 Графики дежурств", callback_data="duty_view_schedules"
+        ),  # Новая кнопка
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="🔍 Проверить доступность", callback_data="duty_check_availability"
+        ),
+        types.InlineKeyboardButton(
+            text="🤖 Авто-план на год", callback_data="duty_auto_plan"
         ),
     )
     builder.row(
@@ -138,4 +147,145 @@ def get_duty_back_keyboard() -> types.InlineKeyboardMarkup:
     """Кнопка возврата в меню дежурств"""
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🔙 Назад", callback_data="duty_menu"))
+    return builder.as_markup()
+
+
+def get_duty_period_keyboard(sector_id: int) -> types.InlineKeyboardMarkup:
+    """Клавиатура для выбора периода дежурства"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        types.InlineKeyboardButton(
+            text="📅 На день", callback_data=f"duty_period:day:{sector_id}"
+        ),
+        types.InlineKeyboardButton(
+            text="📅 На неделю", callback_data=f"duty_period:week:{sector_id}"
+        ),
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="📅 На месяц", callback_data=f"duty_period:month:{sector_id}"
+        ),
+        types.InlineKeyboardButton(
+            text="📅 На год", callback_data=f"duty_period:year:{sector_id}"
+        ),
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="🤖 Авто-план на год", callback_data=f"duty_plan_year:{sector_id}"
+        ),
+    )
+    builder.row(types.InlineKeyboardButton(text="🔙 Назад", callback_data="duty_menu"))
+    return builder.as_markup()
+
+
+def get_working_days_keyboard(sector_id: int, year: int) -> types.InlineKeyboardMarkup:
+    """Клавиатура для выбора типа дней при планировании на год"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        types.InlineKeyboardButton(
+            text="📆 Все дни",
+            callback_data=f"duty_plan_execute:{sector_id}:{year}:false",
+        ),
+        types.InlineKeyboardButton(
+            text="💼 Только рабочие",
+            callback_data=f"duty_plan_execute:{sector_id}:{year}:true",
+        ),
+    )
+    builder.row(types.InlineKeyboardButton(text="🔙 Назад", callback_data="duty_menu"))
+    return builder.as_markup()
+
+
+def get_schedule_view_keyboard(sector_id: int) -> types.InlineKeyboardMarkup:
+    """Клавиатура для выбора типа графика"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        types.InlineKeyboardButton(
+            text="📅 На неделю", callback_data=f"schedule_view:week:{sector_id}"
+        ),
+        types.InlineKeyboardButton(
+            text="📆 На месяц", callback_data=f"schedule_view:month:{sector_id}"
+        ),
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="📊 На год", callback_data=f"schedule_view:year:{sector_id}"
+        ),
+        types.InlineKeyboardButton(
+            text="📈 Статистика", callback_data=f"schedule_view:stats:{sector_id}"
+        ),
+    )
+    builder.row(types.InlineKeyboardButton(text="🔙 Назад", callback_data="duty_menu"))
+    return builder.as_markup()
+
+
+def get_month_navigation_keyboard(
+    sector_id: int, year: int, month: int
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура для навигации по месяцам"""
+    builder = InlineKeyboardBuilder()
+
+    # Предыдущий месяц
+    prev_month = month - 1
+    prev_year = year
+    if prev_month == 0:
+        prev_month = 12
+        prev_year = year - 1
+
+    # Следующий месяц
+    next_month = month + 1
+    next_year = year
+    if next_month == 13:
+        next_month = 1
+        next_year = year + 1
+
+    builder.row(
+        types.InlineKeyboardButton(
+            text="◀ Предыдущий",
+            callback_data=f"schedule_month:{sector_id}:{prev_year}:{prev_month}",
+        ),
+        types.InlineKeyboardButton(
+            text="Следующий ▶",
+            callback_data=f"schedule_month:{sector_id}:{next_year}:{next_month}",
+        ),
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="🔄 Текущий месяц",
+            callback_data=f"schedule_month:{sector_id}:{date.today().year}:{date.today().month}",
+        ),
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="🔙 Назад", callback_data=f"schedule_view_menu:{sector_id}"
+        )
+    )
+    return builder.as_markup()
+
+
+def get_year_navigation_keyboard(
+    sector_id: int, year: int
+) -> types.InlineKeyboardMarkup:
+    """Клавиатура для навигации по годам"""
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        types.InlineKeyboardButton(
+            text="◀ {0}".format(year - 1),
+            callback_data=f"schedule_year:{sector_id}:{year - 1}",
+        ),
+        types.InlineKeyboardButton(
+            text="{0} ▶".format(year + 1),
+            callback_data=f"schedule_year:{sector_id}:{year + 1}",
+        ),
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="🔄 Текущий год",
+            callback_data=f"schedule_year:{sector_id}:{date.today().year}",
+        ),
+    )
+    builder.row(
+        types.InlineKeyboardButton(
+            text="🔙 Назад", callback_data=f"schedule_view_menu:{sector_id}"
+        )
+    )
     return builder.as_markup()

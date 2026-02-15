@@ -76,6 +76,21 @@ from bot.handlers.duty import (
     duty_menu,
     duty_cancel,
     duty_back_to_admin,
+    duty_assign_period_start,
+    duty_period_sector_selected,
+    duty_period_selected,
+    duty_auto_plan_start,
+    duty_plan_year_sector,
+    duty_plan_execute,
+    duty_view_schedules_start,
+    schedule_view_sector_selected,
+    schedule_view_week,
+    schedule_view_month,
+    schedule_view_year,
+    schedule_view_stats,
+    schedule_month_navigate,
+    schedule_year_navigate,
+    schedule_view_menu,
 )
 
 # Импорт состояний из центрального файла
@@ -291,6 +306,85 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     dp.callback_query.register(handle_user_pagination, F.data.startswith("user_page:"))
     dp.callback_query.register(handle_user_selection, F.data.startswith("select_user:"))
     dp.callback_query.register(handle_cancel_selection, F.data == "cancel_selection")
+
+    # Новые обработчики для периодов
+    dp.callback_query.register(
+        duty_assign_period_start,
+        F.data == "duty_assign_period",
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        duty_period_sector_selected,
+        F.data.startswith("duty_period_sector:"),
+        DutyStates.waiting_for_sector_selection,
+    )
+    dp.callback_query.register(
+        duty_period_selected,
+        F.data.startswith("duty_period:"),
+        DutyStates.waiting_for_period_selection,
+    )
+
+    # Обработчики для авто-планирования
+    dp.callback_query.register(
+        duty_auto_plan_start, F.data == "duty_auto_plan", DutyStates.waiting_for_action
+    )
+    dp.callback_query.register(
+        duty_plan_year_sector,
+        F.data.startswith("duty_plan_year_sector:"),
+        DutyStates.waiting_for_sector_selection,
+    )
+    dp.callback_query.register(
+        duty_plan_execute,
+        F.data.startswith("duty_plan_execute:"),
+        DutyStates.waiting_for_plan_confirmation,
+    )
+
+    # Просмотр графиков
+    dp.callback_query.register(
+        duty_view_schedules_start,
+        F.data == "duty_view_schedules",
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        schedule_view_sector_selected,
+        F.data.startswith("schedule_view_sector:"),
+        DutyStates.waiting_for_sector_selection,
+    )
+    dp.callback_query.register(
+        schedule_view_week,
+        F.data.startswith("schedule_view:week:"),
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        schedule_view_month,
+        F.data.startswith("schedule_view:month:"),
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        schedule_view_year,
+        F.data.startswith("schedule_view:year:"),
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        schedule_view_stats,
+        F.data.startswith("schedule_view:stats:"),
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        schedule_month_navigate,
+        F.data.startswith("schedule_month:"),
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        schedule_year_navigate,
+        F.data.startswith("schedule_year:"),
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        schedule_view_menu,
+        F.data.startswith("schedule_view_menu:"),
+        DutyStates.waiting_for_action,
+    )
 
     # @dp.callback_query()
     # async def temp_handler(callback: types.CallbackQuery):

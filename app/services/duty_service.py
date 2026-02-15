@@ -432,3 +432,182 @@ class DutyService:
         result.sort(key=lambda x: (not x["in_pool"], -x["total_duties"]))
 
         return result
+
+    @staticmethod
+    async def assign_duty_for_period(
+        db: AsyncSession,
+        sector_id: int,
+        start_date: date,
+        end_date: date,
+        days_count: int,
+        created_by: Optional[int] = None,
+    ) -> Dict:
+        """Назначить дежурного на указанный период"""
+
+        # Проверяем существование сектора
+        from app.models.user import Sector
+
+        sector_result = await db.execute(
+            select(Sector).where(Sector.sector_id == sector_id)
+        )
+        sector = sector_result.scalar_one_or_none()
+        if not sector:
+            return {
+                "success": False,
+                "message": f"Сектор с ID {sector_id} не найден",
+                "assigned_user_id": None,
+            }
+
+        # Проверяем, есть ли активные дежурные в пуле для этого сектора
+        pool_result = await db.execute(
+            select(DutyAdminPool).where(
+                DutyAdminPool.sector_id == sector_id, DutyAdminPool.is_active == True
+            )
+        )
+        active_pool = pool_result.scalars().all()
+
+        if not active_pool:
+            return {
+                "success": False,
+                "message": "В пуле нет активных дежурных для этого сектора",
+                "assigned_user_id": None,
+            }
+
+        # Проверяем, не назначено ли уже на какие-то даты в этом периоде
+        existing = await db.execute(
+            select(DutySchedule).where(
+                DutySchedule.sector_id == sector_id,
+                DutySchedule.duty_date.between(start_date, end_date),
+            )
+        )
+        existing_duties = existing.scalars().all()
+
+        if existing_duties:
+            existing_dates = [d.duty_date for d in existing_duties]
+            return {
+                "success": False,
+                "message": f"На некоторые даты уже назначены дежурства: {existing_dates}",
+                "assigned_user_id": None,
+            }
+
+        year = start_date.year
+
+        # Получаем статистику для всех в пуле
+        user_stats = []
+        for pool_entry in active_pool:
+            user_id = pool_entry.user_id
+
+            # Статистика за год
+            stats_result = await db.execute(
+                select(DutyStatistics).where(
+                    DutyStatistics.user_id == user_id,
+                    DutyStatistics.sector_id == sector_id,
+                    DutyStatistics.year == year,
+                )
+            )
+            stats = stats_result.scalar_one_or_none()
+
+            # Получаем ФИО
+            fio_result = await db.execute(select(FIO).where(FIO.user_id == user_id))
+            fio = fio_result.scalar_one_or_none()
+
+            # Получаем предыдущие дежурства в этом году для более точного распределения
+            prev_duties_result = await db.execute(
+                select(DutySchedule).where(
+                    DutySchedule.user_id == user_id,
+                    DutySchedule.sector_id == sector_id,
+                    DutySchedule.duty_date >= date(year, 1, 1),
+                    DutySchedule.duty_date <= date(year, 12, 31),
+                )
+            )
+            prev_duties = prev_duties_result.scalars().all()
+            prev_days_count = len(prev_duties)
+
+            user_stats.append(
+                {
+                    "user_id": user_id,
+                    "fio": fio,
+                    "total_duties": stats.total_duties if stats else 0,
+                    "prev_days_count": prev_days_count,
+                    "last_duty_date": stats.last_duty_date if stats else None,
+                }
+            )
+
+        # Сортируем по количеству дежурств (меньше -> лучше)
+        user_stats.sort(
+            key=lambda x: (
+                x["total_duties"],
+                x["prev_days_count"],
+                x["last_duty_date"] or date.min,
+            )
+        )
+
+        # Выбираем первого (с наименьшим количеством)
+        selected = user_stats[0]
+        selected_user_id = selected["user_id"]
+
+        # Создаем массив дат на период
+        period_dates = []
+        current_date = start_date
+        while current_date <= end_date:
+            period_dates.append(current_date)
+            current_date += timedelta(days=1)
+
+        # Создаем записи в расписании
+        for duty_date in period_dates:
+            schedule_entry = DutySchedule(
+                user_id=selected_user_id,
+                sector_id=sector_id,
+                duty_date=duty_date,
+                week_start=start_date,  # Для недели это начало недели, для других периодов - начало периода
+                created_by=created_by,
+            )
+            db.add(schedule_entry)
+
+        # Обновляем статистику
+        stats_result = await db.execute(
+            select(DutyStatistics).where(
+                DutyStatistics.user_id == selected_user_id,
+                DutyStatistics.sector_id == sector_id,
+                DutyStatistics.year == year,
+            )
+        )
+        stats = stats_result.scalar_one_or_none()
+
+        if stats:
+            stats.total_duties += days_count
+            stats.last_duty_date = period_dates[-1]
+            stats.updated_at = datetime.utcnow()
+        else:
+            stats = DutyStatistics(
+                user_id=selected_user_id,
+                sector_id=sector_id,
+                year=year,
+                total_duties=days_count,
+                last_duty_date=period_dates[-1],
+            )
+            db.add(stats)
+
+        await db.commit()
+
+        # Формируем имя пользователя
+        user_name = "Неизвестно"
+        if selected["fio"]:
+            user_name = (
+                f"{selected['fio'].last_name} {selected['fio'].first_name}".strip()
+            )
+        else:
+            user_result = await db.execute(
+                select(User).where(User.user_id == selected_user_id)
+            )
+            user = user_result.scalar_one_or_none()
+            if user and user.last_name and user.first_name:
+                user_name = f"{user.last_name} {user.first_name}".strip()
+
+        return {
+            "success": True,
+            "message": f"Дежурство успешно назначено на {days_count} дней",
+            "assigned_user_id": selected_user_id,
+            "assigned_user_name": user_name,
+            "dates": period_dates,
+        }

@@ -499,6 +499,168 @@ class APIClient:
         except Exception as e:
             return {"error": f"Connection error: {str(e)}"}
 
+    async def assign_duty_for_period(
+        self,
+        sector_id: int,
+        period: str,  # "day", "week", "month", "year"
+        start_date: str,
+        created_by: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Назначить дежурного на период"""
+        session = await self.get_session()
+        url = "/duty/assign"
+        params = {"sector_id": sector_id, "period": period, "start_date": start_date}
+        if created_by:
+            params["created_by"] = created_by
+
+        try:
+            async with session.post(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def plan_yearly_schedule(
+        self, sector_id: int, year: int, working_days_only: bool = True
+    ) -> Dict[str, Any]:
+        """Спланировать дежурства на весь год"""
+        session = await self.get_session()
+        url = "/duty/plan-year"
+        params = {
+            "sector_id": sector_id,
+            "year": year,
+            "working_days_only": working_days_only,
+        }
+
+        try:
+            async with session.post(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def check_availability(
+        self, sector_id: int, start_date: str, end_date: str
+    ) -> Dict[str, Any]:
+        """Проверить доступность дежурных на период"""
+        session = await self.get_session()
+        url = f"/duty/availability/{sector_id}"
+        params = {"start_date": start_date, "end_date": end_date}
+
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def get_week_schedule(
+        self, sector_id: Optional[int] = None, week_start: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Получить график дежурств на неделю"""
+        session = await self.get_session()
+        url = "/duty/schedule/week"
+        params = {}
+        if sector_id:
+            params["sector_id"] = sector_id
+        if week_start:
+            params["week_start"] = week_start
+
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def get_month_schedule(
+        self,
+        sector_id: Optional[int] = None,
+        year: Optional[int] = None,
+        month: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Получить график дежурств на месяц"""
+        session = await self.get_session()
+        url = "/duty/schedule/month"
+        params = {}
+        if sector_id:
+            params["sector_id"] = sector_id
+        if year:
+            params["year"] = year
+        if month:
+            params["month"] = month
+
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def get_year_schedule(
+        self, sector_id: Optional[int] = None, year: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Получить годовую статистику дежурств"""
+        session = await self.get_session()
+        url = "/duty/schedule/year"
+        params = {}
+        if sector_id:
+            params["sector_id"] = sector_id
+        if year:
+            params["year"] = year
+
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def get_duty_statistics_chart(
+        self,
+        sector_id: Optional[int] = None,
+        user_id: Optional[int] = None,
+        year: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Получить данные для построения графиков"""
+        session = await self.get_session()
+        url = "/duty/statistics/chart"
+        params = {}
+        if sector_id:
+            params["sector_id"] = sector_id
+        if user_id:
+            params["user_id"] = user_id
+        if year:
+            params["year"] = year
+
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
 
 # Глобальный экземпляр клиента
 api_client = APIClient()
