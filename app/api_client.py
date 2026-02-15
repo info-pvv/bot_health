@@ -532,7 +532,9 @@ class APIClient:
         params = {
             "sector_id": sector_id,
             "year": year,
-            "working_days_only": working_days_only,
+            "working_days_only": str(
+                working_days_only
+            ).lower(),  # Преобразуем bool в строку
         }
 
         try:
@@ -650,6 +652,112 @@ class APIClient:
             params["user_id"] = user_id
         if year:
             params["year"] = year
+
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    # ========== НОВЫЕ МЕТОДЫ ДЛЯ ПЛАНИРОВАНИЯ ==========
+
+    async def assign_weekly_auto(
+        self,
+        sector_id: int,
+        week_start: str,
+        created_by: Optional[int] = None,
+        allow_same_admin: bool = False,
+    ) -> Dict[str, Any]:
+        """Автоматическое назначение дежурного на неделю"""
+        session = await self.get_session()
+        url = "/duty/assign-weekly-auto"
+        params = {
+            "sector_id": sector_id,
+            "week_start": week_start,
+            "allow_same_admin": str(allow_same_admin).lower(),
+        }
+        if created_by:
+            params["created_by"] = created_by
+
+        try:
+            async with session.post(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def assign_weekly_manual(
+        self,
+        sector_id: int,
+        week_start: str,
+        user_id: int,
+        created_by: Optional[int] = None,
+        force: bool = False,
+    ) -> Dict[str, Any]:
+        """Ручное назначение конкретного дежурного на неделю"""
+        session = await self.get_session()
+        url = "/duty/assign-weekly-manual"
+        params = {
+            "sector_id": sector_id,
+            "week_start": week_start,
+            "user_id": user_id,
+            "force": str(force).lower(),
+        }
+        if created_by:
+            params["created_by"] = created_by
+
+        try:
+            async with session.post(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def get_available_admins(
+        self,
+        sector_id: int,
+        week_start: str,
+        exclude_last_week: bool = True,
+    ) -> Dict[str, Any]:
+        """Получить список доступных администраторов"""
+        session = await self.get_session()
+        url = f"/duty/available-admins/{sector_id}"
+        params = {
+            "week_start": week_start,
+            "exclude_last_week": str(exclude_last_week).lower(),
+        }
+
+        try:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    return await response.json()
+                else:
+                    error_text = await response.text()
+                    return {"error": f"API error {response.status}: {error_text}"}
+        except Exception as e:
+            return {"error": f"Connection error: {str(e)}"}
+
+    async def get_week_schedule_api(
+        self,
+        sector_id: int,
+        week_start: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Получить расписание на неделю"""
+        session = await self.get_session()
+        url = f"/duty/week-schedule/{sector_id}"
+        params = {}
+        if week_start:
+            params["week_start"] = week_start
 
         try:
             async with session.get(url, params=params) as response:

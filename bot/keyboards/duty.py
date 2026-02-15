@@ -24,23 +24,23 @@ def get_duty_main_keyboard() -> types.InlineKeyboardMarkup:
             text="➖ Удалить из пула", callback_data="duty_remove_from_pool"
         ),
         types.InlineKeyboardButton(
-            text="📅 Назначить на период", callback_data="duty_assign_period"
+            text="📅 Назначить на неделю (авто)", callback_data="duty_assign_week"
         ),
     )
     builder.row(
+        types.InlineKeyboardButton(
+            text="👤 Назначить вручную", callback_data="duty_assign_week_manual"
+        ),
         types.InlineKeyboardButton(
             text="👤 Дежурный сегодня", callback_data="duty_today"
         ),
-        types.InlineKeyboardButton(
-            text="📊 Графики дежурств", callback_data="duty_view_schedules"
-        ),  # Новая кнопка
     )
     builder.row(
         types.InlineKeyboardButton(
-            text="🔍 Проверить доступность", callback_data="duty_check_availability"
+            text="📊 Графики дежурств", callback_data="duty_view_schedules"
         ),
         types.InlineKeyboardButton(
-            text="🤖 Авто-план на год", callback_data="duty_auto_plan"
+            text="🤖 План на год", callback_data="duty_auto_plan"
         ),
     )
     builder.row(

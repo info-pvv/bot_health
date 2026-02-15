@@ -11,7 +11,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram import types
 from bot.scheduler import ReportScheduler
 
-
 from bot.config import TOKEN
 
 # Импорт обработчиков
@@ -56,7 +55,7 @@ from bot.handlers.user_selection_handlers import (
     handle_cancel_selection,
 )
 
-# +++ ИМПОРТ НОВЫХ ОБРАБОТЧИКОВ ДЕЖУРСТВ +++
+# Импорт обработчиков дежурств
 from bot.handlers.duty import (
     cmd_duty_management,
     duty_view_pool_start,
@@ -68,8 +67,13 @@ from bot.handlers.duty import (
     duty_remove_select_sector,
     duty_remove_confirm,
     duty_assign_week_start,
-    duty_assign_week_sector,
-    duty_assign_week_confirm,
+    duty_assign_week_auto_sector,
+    duty_auto_confirm,
+    duty_assign_week_manual_start,
+    duty_manual_sector_selected,
+    duty_manual_select,
+    duty_manual_force,
+    duty_manual_force_confirm,
     duty_today,
     duty_stats_start,
     duty_stats_sector,
@@ -91,6 +95,7 @@ from bot.handlers.duty import (
     schedule_month_navigate,
     schedule_year_navigate,
     schedule_view_menu,
+    duty_manual_select_start,
 )
 
 # Импорт состояний из центрального файла
@@ -121,7 +126,6 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
 
     # Планируем задачи
     scheduler.schedule_daily_report("07:30")  # Ежедневно в 7:30
-    # scheduler.schedule_test_report(60)  # Тест каждые 60 секунд
 
     # Запускаем планировщик
     scheduler.start()
@@ -210,16 +214,16 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         F.text == "⬅️ Главное меню",
     )
 
-    # +++ РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ ДЕЖУРСТВ +++
-
-    # Вход в меню дежурств (можно добавить кнопку в админ-панель)
+    # Вход в меню дежурств
     dp.message.register(
         cmd_duty_management,
         AdminStates.waiting_admin_command,
         F.text == "👨‍✈️ Управление дежурствами",
     )
 
-    # Callback-обработчики для дежурств
+    # ========== ОСНОВНЫЕ CALLBACK-ОБРАБОТЧИКИ ДЕЖУРСТВ ==========
+
+    # Просмотр пула
     dp.callback_query.register(
         duty_view_pool_start, F.data == "duty_view_pool", DutyStates.waiting_for_action
     )
@@ -229,6 +233,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         DutyStates.waiting_for_sector_selection,
     )
 
+    # Добавление в пул
     dp.callback_query.register(
         duty_add_to_pool_start,
         F.data == "duty_add_to_pool",
@@ -245,6 +250,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         DutyStates.waiting_for_user_selection,
     )
 
+    # Удаление из пула
     dp.callback_query.register(
         duty_remove_from_pool_start,
         F.data == "duty_remove_from_pool",
@@ -261,26 +267,56 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         DutyStates.waiting_for_user_removal,
     )
 
+    # Автоматическое назначение
     dp.callback_query.register(
         duty_assign_week_start,
         F.data == "duty_assign_week",
         DutyStates.waiting_for_action,
     )
     dp.callback_query.register(
-        duty_assign_week_sector,
-        F.data.startswith("duty_assign_week_sector:"),
+        duty_assign_week_auto_sector,
+        F.data.startswith("duty_assign_week_auto_sector:"),
         DutyStates.waiting_for_sector_selection,
     )
     dp.callback_query.register(
-        duty_assign_week_confirm,
-        F.data.startswith("duty_confirm_week:"),
+        duty_auto_confirm,
+        F.data.startswith("duty_auto_confirm:"),
         DutyStates.waiting_for_week_selection,
     )
 
+    # Ручное назначение
+    dp.callback_query.register(
+        duty_assign_week_manual_start,
+        F.data == "duty_assign_week_manual",
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(
+        duty_manual_sector_selected,
+        F.data.startswith("duty_manual_sector:"),
+        DutyStates.waiting_for_sector_selection,
+    )
+    dp.callback_query.register(
+        duty_manual_select,
+        F.data.startswith("duty_manual_select:"),
+        DutyStates.waiting_for_user_selection,
+    )
+    dp.callback_query.register(
+        duty_manual_force,
+        F.data.startswith("duty_manual_force:"),
+        DutyStates.waiting_for_user_selection,
+    )
+    dp.callback_query.register(
+        duty_manual_force_confirm,
+        F.data.startswith("duty_manual_force_confirm:"),
+        DutyStates.waiting_for_user_selection,
+    )
+
+    # Дежурный сегодня
     dp.callback_query.register(
         duty_today, F.data == "duty_today", DutyStates.waiting_for_action
     )
 
+    # Статистика
     dp.callback_query.register(
         duty_stats_start, F.data == "duty_stats", DutyStates.waiting_for_action
     )
@@ -290,24 +326,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         DutyStates.waiting_for_sector_selection,
     )
 
-    dp.callback_query.register(
-        duty_menu, F.data == "duty_menu", DutyStates.waiting_for_action
-    )
-    dp.callback_query.register(duty_cancel, F.data == "duty_cancel")
-    dp.callback_query.register(
-        duty_back_to_admin,
-        F.data == "duty_back_to_admin",
-        DutyStates.waiting_for_action,
-    )
-
-    # Callback обработчики
-    dp.callback_query.register(process_toggle_action, F.data.startswith("toggle_"))
-
-    dp.callback_query.register(handle_user_pagination, F.data.startswith("user_page:"))
-    dp.callback_query.register(handle_user_selection, F.data.startswith("select_user:"))
-    dp.callback_query.register(handle_cancel_selection, F.data == "cancel_selection")
-
-    # Новые обработчики для периодов
+    # Назначение на период
     dp.callback_query.register(
         duty_assign_period_start,
         F.data == "duty_assign_period",
@@ -324,7 +343,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         DutyStates.waiting_for_period_selection,
     )
 
-    # Обработчики для авто-планирования
+    # Авто-планирование на год
     dp.callback_query.register(
         duty_auto_plan_start, F.data == "duty_auto_plan", DutyStates.waiting_for_action
     )
@@ -386,13 +405,36 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
         DutyStates.waiting_for_action,
     )
 
-    # @dp.callback_query()
-    # async def temp_handler(callback: types.CallbackQuery):
-    #    print(f"🔍 DEBUG: callback.data = '{callback.data}'")
-    #    print(f"🔍 DEBUG: type = {type(callback.data)}")
-    #
-    #    # Ответьте что угодно, чтобы пользователь видел реакцию
-    #    await callback.answer(f"📨: {callback.data}")
+    # Админские callback'и
+    dp.callback_query.register(process_toggle_action, F.data.startswith("toggle_"))
+    dp.callback_query.register(handle_user_pagination, F.data.startswith("user_page:"))
+    dp.callback_query.register(handle_user_selection, F.data.startswith("select_user:"))
+    dp.callback_query.register(handle_cancel_selection, F.data == "cancel_selection")
+
+    # Вспомогательные
+    dp.callback_query.register(
+        duty_menu,
+        F.data == "duty_menu",
+        DutyStates.waiting_for_action,
+    )
+    dp.callback_query.register(duty_cancel, F.data == "duty_cancel")
+    dp.callback_query.register(
+        duty_back_to_admin,
+        F.data == "duty_back_to_admin",
+        DutyStates.waiting_for_action,
+    )
+
+    dp.callback_query.register(
+        duty_manual_select_start,
+        F.data.startswith("duty_manual_select_start:"),
+        DutyStates.waiting_for_week_selection,
+    )
+
+    @dp.callback_query()
+    async def debug_all_callbacks(callback: types.CallbackQuery):
+        """Отладочный обработчик - показывает все callback данные"""
+        logger.info(f"🔍 DEBUG: Получен callback: '{callback.data}'")
+        await callback.answer(f"Получен: {callback.data[:50]}")
 
     return bot, dp
 

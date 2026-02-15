@@ -8,7 +8,6 @@ from datetime import date, datetime, timedelta
 from enum import Enum
 from collections import defaultdict
 import calendar
-
 from app.models.database import get_db
 from app.models.user import User, FIO, Sector
 from app.models.duty import DutyAdminPool, DutySchedule, DutyStatistics
@@ -39,6 +38,325 @@ class DutyPeriod(str, Enum):
 
 
 router = APIRouter(prefix="/duty", tags=["duty"])
+
+# ========== НОВЫЕ ЭНДПОИНТЫ ДЛЯ ПЛАНИРОВАНИЯ ==========
+
+
+@router.post("/assign-weekly-auto")
+async def assign_weekly_auto(
+    sector_id: int,
+    week_start: date,
+    created_by: Optional[int] = None,
+    allow_same_admin: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Автоматическое назначение дежурного на неделю
+    - Выбирает админа с наименьшим количеством дежурств
+    - По умолчанию исключает админа с прошлой недели
+    """
+    result = await DutyService.assign_weekly_duty_auto(
+        db, sector_id, week_start, created_by, allow_same_admin
+    )
+
+    if not result["success"]:
+        raise HTTPException(status_code=400, detail=result["message"])
+
+    return result
+
+
+@router.post("/assign-weekly-manual")
+async def assign_weekly_manual(
+    sector_id: int,
+    week_start: date,
+    user_id: int,
+    created_by: Optional[int] = None,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Ручное назначение конкретного дежурного на неделю
+    """
+    # Сначала проверяем существование пользователя через прямой запрос к таблице users
+    from app.models.user import User
+    from sqlalchemy import select
+
+    # Пробуем найти пользователя по user_id
+    user_query = await db.execute(select(User).where(User.user_id == user_id))
+    user = user_query.scalar_one_or_none()
+
+    if not user:
+        # Если не нашли, пробуем найти по id (первичному ключу)
+        user_query = await db.execute(select(User).where(User.id == user_id))
+        user = user_query.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=400, detail=f"Пользователь с ID {user_id} не найден в системе"
+        )
+
+    # Проверяем существование сектора
+    from app.models.user import Sector
+
+    sector_query = await db.execute(select(Sector).where(Sector.sector_id == sector_id))
+    sector = sector_query.scalar_one_or_none()
+
+    if not sector:
+        raise HTTPException(
+            status_code=400, detail=f"Сектор с ID {sector_id} не найден"
+        )
+
+    # Проверяем, есть ли пользователь в пуле (если не force)
+    from app.models.duty import DutyAdminPool
+
+    if not force:
+        pool_query = await db.execute(
+            select(DutyAdminPool).where(
+                DutyAdminPool.user_id == user.user_id,
+                DutyAdminPool.sector_id == sector_id,
+                DutyAdminPool.is_active == True,
+            )
+        )
+        if not pool_query.scalar_one_or_none():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Пользователь не находится в активном пуле дежурных для этого сектора",
+            )
+
+    # Получаем ФИО пользователя
+    from app.models.user import FIO
+
+    fio_query = await db.execute(select(FIO).where(FIO.user_id == user.user_id))
+    fio = fio_query.scalar_one_or_none()
+
+    if fio and fio.last_name and fio.first_name:
+        user_name = f"{fio.last_name} {fio.first_name}".strip()
+    else:
+        user_name = (
+            f"{user.last_name} {user.first_name}".strip()
+            if user.last_name and user.first_name
+            else f"Пользователь {user.user_id}"
+        )
+
+    # Создаем записи в расписании
+    from app.models.duty import DutySchedule, DutyStatistics
+    from datetime import timedelta
+
+    week_dates = [week_start + timedelta(days=i) for i in range(7)]
+
+    # Если не force, проверяем существующие записи
+    if not force:
+        existing_query = await db.execute(
+            select(DutySchedule).where(
+                DutySchedule.sector_id == sector_id,
+                DutySchedule.duty_date.in_(week_dates),
+            )
+        )
+        if existing_query.first():
+            raise HTTPException(
+                status_code=400,
+                detail=f"На некоторые даты уже назначены дежурства. Используйте force=true для перезаписи",
+            )
+
+    # Удаляем существующие записи на эту неделю (если есть)
+    await db.execute(
+        DutySchedule.__table__.delete().where(
+            DutySchedule.sector_id == sector_id, DutySchedule.duty_date.in_(week_dates)
+        )
+    )
+
+    # Создаем новые записи
+    for duty_date in week_dates:
+        schedule_entry = DutySchedule(
+            user_id=user.user_id,
+            sector_id=sector_id,
+            duty_date=duty_date,
+            week_start=week_start,
+            created_by=created_by,
+        )
+        db.add(schedule_entry)
+
+    # Обновляем статистику
+    year = week_start.year
+
+    stats_query = await db.execute(
+        select(DutyStatistics).where(
+            DutyStatistics.user_id == user.user_id,
+            DutyStatistics.sector_id == sector_id,
+            DutyStatistics.year == year,
+        )
+    )
+    stats = stats_query.scalar_one_or_none()
+
+    if stats:
+        stats.total_duties += 7
+        stats.last_duty_date = week_dates[-1]
+        stats.updated_at = datetime.utcnow()
+    else:
+        stats = DutyStatistics(
+            user_id=user.user_id,
+            sector_id=sector_id,
+            year=year,
+            total_duties=7,
+            last_duty_date=week_dates[-1],
+        )
+        db.add(stats)
+
+    await db.commit()
+
+    return {
+        "success": True,
+        "message": f"Дежурство успешно назначено на {user_name}",
+        "assigned_user_id": user.user_id,
+        "assigned_user_name": user_name,
+        "week_dates": [d.isoformat() for d in week_dates],
+    }
+
+
+@router.post("/plan-year")
+async def plan_yearly_duty_schedule(
+    sector_id: int,
+    year: int,
+    working_days_only: bool = Query(True, description="Только рабочие дни"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Автоматически спланировать дежурства на весь год"""
+    try:
+        # Вызываем SQL функцию
+        from sqlalchemy import text
+
+        result = await db.execute(
+            text(
+                "SELECT * FROM public.assign_yearly_duty_schedule(:sector_id, :year, :working_days_only)"
+            ),
+            {
+                "sector_id": sector_id,
+                "year": year,
+                "working_days_only": working_days_only,  # PostgreSQL сам преобразует bool
+            },
+        )
+
+        assignments = result.fetchall()
+
+        return {
+            "sector_id": sector_id,
+            "year": year,
+            "working_days_only": working_days_only,
+            "total_assignments": len(assignments),
+            "assignments": [
+                {"month": a[0], "week": a[1], "user_id": a[2], "user_name": a[3]}
+                for a in assignments
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка планирования: {str(e)}")
+
+
+@router.get("/available-admins/{sector_id}")
+async def get_available_admins(
+    sector_id: int,
+    week_start: date,
+    exclude_last_week: bool = True,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Получить список доступных администраторов для назначения на неделю
+    """
+    from app.models.user import User, FIO
+    from app.models.duty import DutyAdminPool, DutySchedule, DutyStatistics
+
+    # Получаем всех активных дежурных в пуле
+    pool_query = await db.execute(
+        select(DutyAdminPool).where(
+            DutyAdminPool.sector_id == sector_id, DutyAdminPool.is_active == True
+        )
+    )
+    active_pool = pool_query.scalars().all()
+
+    if not active_pool:
+        return {"available_admins": []}
+
+    pool_user_ids = [p.user_id for p in active_pool]
+
+    # Получаем информацию о пользователях
+    users_query = await db.execute(select(User).where(User.user_id.in_(pool_user_ids)))
+    users = {u.user_id: u for u in users_query.scalars().all()}
+
+    # Получаем ФИО пользователей
+    fio_query = await db.execute(select(FIO).where(FIO.user_id.in_(pool_user_ids)))
+    fios = {f.user_id: f for f in fio_query.scalars().all()}
+
+    # Получаем админа с прошлой недели (если нужно исключить)
+    prev_admin_id = None
+    if exclude_last_week:
+        prev_week = week_start - timedelta(days=7)
+        prev_query = await db.execute(
+            select(DutySchedule)
+            .where(
+                DutySchedule.sector_id == sector_id,
+                DutySchedule.week_start == prev_week,
+            )
+            .limit(1)
+        )
+        prev_duty = prev_query.scalar_one_or_none()
+        if prev_duty:
+            prev_admin_id = prev_duty.user_id
+
+    # Получаем статистику за год
+    year = week_start.year
+    stats_query = await db.execute(
+        select(DutyStatistics).where(
+            DutyStatistics.sector_id == sector_id,
+            DutyStatistics.year == year,
+            DutyStatistics.user_id.in_(pool_user_ids),
+        )
+    )
+    stats = {s.user_id: s.total_duties for s in stats_query.scalars().all()}
+
+    # Формируем список
+    result = []
+    for user_id in pool_user_ids:
+        # Пропускаем админа с прошлой недели, если нужно
+        if exclude_last_week and prev_admin_id == user_id:
+            continue
+
+        user = users.get(user_id)
+        fio = fios.get(user_id)
+
+        # Формируем имя
+        if fio and fio.last_name and fio.first_name:
+            user_name = f"{fio.last_name} {fio.first_name}".strip()
+        elif user and user.last_name and user.first_name:
+            user_name = f"{user.last_name} {user.first_name}".strip()
+        else:
+            user_name = f"Пользователь {user_id}"
+
+        result.append(
+            {
+                "user_id": user_id,
+                "user_name": user_name,
+                "total_duties": stats.get(user_id, 0),
+            }
+        )
+
+    # Сортируем по количеству дежурств
+    result.sort(key=lambda x: x["total_duties"])
+
+    return {"available_admins": result}
+
+
+@router.get("/week-schedule/{sector_id}")
+async def get_week_schedule(
+    sector_id: int,
+    week_start: Optional[date] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Получить расписание на неделю
+    """
+    schedule = await DutyService.get_week_schedule(db, sector_id, week_start)
+    return schedule
+
 
 # ========== УПРАВЛЕНИЕ ПУЛОМ ДЕЖУРНЫХ ==========
 
@@ -961,7 +1279,7 @@ async def plan_yearly_duty_schedule(
 
     result = await db.execute(
         text(
-            "SELECT * FROM assign_yearly_duty_schedule(:sector_id, :year, :working_days_only)"
+            "SELECT * FROM public.assign_yearly_duty_schedule(:sector_id, :year, :working_days_only)"
         ),
         {"sector_id": sector_id, "year": year, "working_days_only": working_days_only},
     )
