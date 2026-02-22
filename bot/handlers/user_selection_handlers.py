@@ -3,7 +3,11 @@ from aiogram import types, F
 from aiogram.fsm.context import FSMContext
 from app.api_client import api_client
 from bot.utils.formatters import format_user_info
-from bot.keyboards.admin import get_user_actions_keyboard, get_user_selection_keyboard
+from bot.keyboards.admin import (
+    get_user_actions_keyboard,
+    get_user_selection_keyboard,
+    get_admin_keyboard,
+)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 import logging
 
@@ -104,6 +108,19 @@ async def handle_cancel_selection(callback: types.CallbackQuery, state: FSMConte
             await callback.message.delete()
             await callback.answer("❌ Выбор отменен")
             await state.clear()
+
+            # Устанавливаем состояние админ-панели
+            from bot.imports import AdminStates
+
+            await state.set_state(AdminStates.waiting_admin_command)
+
+            # Редактируем сообщение с возвратом в админ-панель
+            await callback.message.edit_text(
+                "👑 **АДМИНИСТРАТИВНАЯ ПАНЕЛЬ**\n\n" "Выберите действие:",
+                parse_mode="Markdown",
+                reply_markup=get_admin_keyboard(),
+            )
+
         except Exception as e:
             logger.error(f"Ошибка отмены: {e}")
             await callback.answer("❌ Отменено")
