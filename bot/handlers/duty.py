@@ -32,6 +32,7 @@ from bot.keyboards.duty import (
     get_week_selection_keyboard,
 )
 from bot.keyboards.admin import get_admin_keyboard
+from aiogram.types import ReplyKeyboardRemove
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ logger = logging.getLogger(__name__)
 async def cmd_duty_management(message: types.Message, state: FSMContext):
     """Войти в меню управления дежурствами"""
     keyboard = get_duty_main_keyboard()
+    await message.answer("🔽", reply_markup=ReplyKeyboardRemove())
     await message.answer(
         "👨‍✈️ **УПРАВЛЕНИЕ ДЕЖУРСТВАМИ АДМИНИСТРАТОРОВ**\n\nВыберите действие:",
         reply_markup=keyboard,

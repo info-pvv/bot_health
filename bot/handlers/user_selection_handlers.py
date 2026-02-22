@@ -105,7 +105,7 @@ async def handle_cancel_selection(callback: types.CallbackQuery, state: FSMConte
     """Обработка отмены выбора"""
     if callback.data == "cancel_selection":
         try:
-            await callback.message.delete()
+            # await callback.message.delete()
             await callback.answer("❌ Выбор отменен")
             await state.clear()
 
@@ -115,11 +115,12 @@ async def handle_cancel_selection(callback: types.CallbackQuery, state: FSMConte
             await state.set_state(AdminStates.waiting_admin_command)
 
             # Редактируем сообщение с возвратом в админ-панель
-            await callback.message.edit_text(
+            await callback.message.answer(
                 "👑 **АДМИНИСТРАТИВНАЯ ПАНЕЛЬ**\n\n" "Выберите действие:",
                 parse_mode="Markdown",
                 reply_markup=get_admin_keyboard(),
             )
+            await callback.message.delete()
 
         except Exception as e:
             logger.error(f"Ошибка отмены: {e}")
